@@ -1,5 +1,5 @@
-#ifndef __MATRIX_MUL_H__
-#define __MATRIX_MUL_H__
+#ifndef __MATRIX_MUL_HPP__
+#define __MATRIX_MUL_HPP__
 #include <iostream>
 #include <thread>
 #include <vector>

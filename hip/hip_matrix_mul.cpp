@@ -1,5 +1,5 @@
-#include "matrixmul.h"
-#include "hip_matrix_mul.h"
+#include "matrixmul.hpp"
+#include "hip_matrix_mul.hpp"
 #include "hip/hip_runtime.h"
 
 using namespace std;

@@ -1,9 +1,9 @@
 #include <iostream>
 #include <cstdlib>
 #include <cstdio>
-#include "matrixmul.h"
-#include "cu_matrix_mul.h"
-#include "timer.h"
+#include "matrixmul.hpp"
+#include "cu_matrix_mul.hpp"
+#include "timer.hpp"
 
 using namespace std;
 

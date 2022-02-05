@@ -1,5 +1,5 @@
-#include "matrixmul.h"
-#include "cu_matrix_mul.h"
+#include "matrixmul.hpp"
+#include "cu_matrix_mul.hpp"
 #include <cuda.h>
 
 using namespace std;
