@@ -20,6 +20,7 @@ public:
     void stop();
 
     size_t gettime_ms();
+    size_t gettime_us();
     void printtime_ms();
 
 private:

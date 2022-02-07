@@ -22,7 +22,7 @@ HRTimer::HRTimer(std::string func_name, std::string logfile_name) {
 HRTimer::~HRTimer() {
     if (m_bDumpedTime == false) {
         stop();
-        printtime_ms();
+        //printtime_ms();
     }
 }
 
@@ -39,6 +39,13 @@ void HRTimer::stop() {
 std::size_t HRTimer::gettime_ms() {
     auto dur = end_t - start_t;
     milli_sec = duration_cast<milliseconds>(dur).count();
+    return milli_sec;
+}
+
+std::size_t HRTimer::gettime_us() {
+    auto dur = end_t - start_t;
+    auto usec = duration_cast<microseconds>(dur).count();
+    return usec;
 }
 
 void HRTimer::dumptime_stream(std::ostream &os) {
