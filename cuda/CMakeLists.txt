@@ -32,7 +32,7 @@ enable_language(CUDA)
 #                    /opt/rocm/include
 #                    /home/scxiao/Workplace/projects/MIGraph/${DEPS_FOLDER}/include)
 
-include_directories(/usr/local/cuda-11.3/include)
+include_directories(/usr/local/cuda-11.3/include ../common)
 link_directories(/usr/local/cuda-11.3/lib64)
 
 message("cmake_current_src_dir = " ${CMAKE_SOURCE_DIR})
@@ -43,7 +43,7 @@ file(GLOB cu_SRC "*.cu")
 file(GLOB test_examples test_*.cpp)
 file(GLOB util_HDR "*.hpp")
 list(REMOVE_ITEM util_SRC ${test_examples})
-set(lib_SRC ${util_SRC} ${cu_SRC})
+set(lib_SRC ${util_SRC} ${cu_SRC} ../common/timer.cpp)
 
 message("lib_src = " ${lib_SRC})
 
