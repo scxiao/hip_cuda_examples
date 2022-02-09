@@ -6,8 +6,8 @@ using namespace std;
 
 __global__ void hipkernel_matrix_mul_naive(double *in1, double *in2, double *res,
         size_t row, size_t dim, size_t column) {
-    int idx_x = hipBlockDim_x * hipBlockIdx_x + hipThreadIdx_x;
-    int idx_y = hipBlockDim_y * hipBlockIdx_y + hipThreadIdx_y;
+    int idx_x = blockDim.x * blockIdx.x + threadIdx.x;
+    int idx_y = blockDim.y * blockIdx.y + threadIdx.y;
 
     if (idx_x < row && idx_y < column) {
         double sum = 0.0;
@@ -70,10 +70,10 @@ __global__ void hipkernel_matrix_mul_shared(double *in1, double *in2, double *re
     HIP_DYNAMIC_SHARED(double, in_shared1);
     HIP_DYNAMIC_SHARED(double, in_shared2);
 
-    size_t b_idx = hipBlockIdx_x;
-    size_t b_idy = hipBlockIdx_y;
-    size_t t_idx = hipThreadIdx_x;
-    size_t t_idy = hipThreadIdx_y;
+    size_t b_idx = blockIdx.x;
+    size_t b_idy = blockIdx.y;
+    size_t t_idx = threadIdx.x;
+    size_t t_idy = threadIdx.y;
 
     double sum = 0.0;
     for (size_t tile_idx = 0; tile_idx < dim; tile_idx += BLOCK_SIZE) {
@@ -87,8 +87,8 @@ __global__ void hipkernel_matrix_mul_shared(double *in1, double *in2, double *re
         __syncthreads();
     }
     
-    int idx_x = hipBlockDim_x * hipBlockIdx_x + hipThreadIdx_x;
-    int idx_y = hipBlockDim_y * hipBlockIdx_y + hipThreadIdx_y;
+    int idx_x = blockDim.x * blockIdx.x + threadIdx.x;
+    int idx_y = blockDim.y * blockIdx.y + threadIdx.y;
     res[idx_x * column + idx_y] = sum;
 
     return;
