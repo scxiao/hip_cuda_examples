@@ -41,11 +41,13 @@ void vec_add(__half *in1, __half *in2, __half *res, int n)
 	//__half2* x1 = (__half2*)in1;
     //__half2* x2 = (__half2*)in2;
     //__half2* r = (__half2*)res;
-    for (int i = tid; i < n; i += nglobal)
+    //for (int i = tid; i < n; i += nglobal)
+    int i = tid;
+    if (tid < n)
     {
         res[i] = __float2half(__half2float(in1[i]) + __half2float(in2[i]));
         //res[i] = __hadd(in1[i], in2[i]);
-        float r = (float)res[i];
+        //float r = (float)res[i];
         //r[i] = __hadd(x1[i], x2[i]);
     }
 
@@ -55,9 +57,11 @@ void vec_add(__half *in1, __half *in2, __half *res, int n)
 __global__ void vec_add(float *in1, float *in2, float *res, int n)
 {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int nglobal = blockDim.x * gridDim.x;
+    //int nglobal = blockDim.x * gridDim.x;
 
-    for (int i = tid; i < n; i += nglobal)
+    //for (int i = tid; i < n; i += nglobal)
+    int i = tid;
+    if (i < n)
     {
         res[i] = in1[i] + in2[i];
     }
@@ -70,7 +74,9 @@ __global__ void vec_add(double *in1, double *in2, double *res, int n)
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
     int nglobal = blockDim.x * gridDim.x;
 
-    for (int i = tid; i < n; i += nglobal)
+    //for (int i = tid; i < n; i += nglobal)
+    int i = tid;
+    if (i < n)
     {
         res[i] = in1[i] + in2[i];
     }
