@@ -14,7 +14,8 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    size_t n = atoi(argv[1]);
+    int sn = atoi(argv[1]);
+    size_t n = (1 << sn);
 
     cout << "vector_size = " << n << endl;
     srand(time(nullptr));

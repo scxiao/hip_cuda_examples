@@ -6,46 +6,16 @@
 
 using namespace std;
 
-//__global__
-//void haxpy(int n, half a, const half *x, half *y)
-//{
-//	int start = threadIdx.x + blockDim.x * blockIdx.x;
-//	int stride = blockDim.x * gridDim.x;
-//
-//#if __CUDA_ARCH__ >= 530
-//  int n2 = n/2;
-//  half2 *x2 = (half2*)x, *y2 = (half2*)y;
-//
-//  for (int i = start; i < n2; i+= stride) 
-//    y2[i] = __hfma2(__halves2half2(a, a), x2[i], y2[i]);
-//
-//	// first thread handles singleton for odd arrays
-//  if (start == 0 && (n%2))
-//  	y[n-1] = __hfma(a, x[n-1], y[n-1]);   
-//
-//#else
-//  for (int i = start; i < n; i+= stride) {
-//    y[i] = __float2half(__half2float(a) * __half2float(x[i]) 
-//      + __half2float(y[i]));
-//  }
-//#endif
-//}
 
 __global__ 
 void vec_add(__half *in1, __half *in2, __half *res, int n)
 {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int nglobal = blockDim.x * gridDim.x;
 
-	//__half2* x1 = (__half2*)in1;
-    //__half2* x2 = (__half2*)in2;
-    //__half2* r = (__half2*)res;
-    for (int i = tid; i < n; i += nglobal)
+    int i = tid;
+    if (i < n)
     {
         res[i] = __float2half(__half2float(in1[i]) + __half2float(in2[i]));
-        //res[i] = __hadd(in1[i], in2[i]);
-        float r = (float)res[i];
-        //r[i] = __hadd(x1[i], x2[i]);
     }
 
     return;
@@ -56,7 +26,9 @@ __global__ void vec_add(float *in1, float *in2, float *res, int n)
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
     int nglobal = blockDim.x * gridDim.x;
 
-    for (int i = tid; i < n; i += nglobal)
+    //for (int i = tid; i < n; i += nglobal)
+    int i = tid;
+    if (i < n)
     {
         res[i] = in1[i] + in2[i];
     }
@@ -69,7 +41,9 @@ __global__ void vec_add(double *in1, double *in2, double *res, int n)
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
     int nglobal = blockDim.x * gridDim.x;
 
-    for (int i = tid; i < n; i += nglobal)
+    //for (int i = tid; i < n; i += nglobal)
+    int i = tid;
+    if (i < n)
     {
         res[i] = in1[i] + in2[i];
     }
