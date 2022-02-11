@@ -50,6 +50,8 @@ message("lib_src = " ${lib_SRC})
 set(test_examples test_mm_mul.cpp test_vec_add.cpp)
 add_library(test_util SHARED ${lib_SRC})
 target_link_libraries(test_util cudart)
+#set_property(TARGET test_util PROPERTY CUDA_ARCHITECTURES 61 70 75)
+set_property(TARGET test_util PROPERTY CUDA_ARCHITECTURES 70)
 
 foreach(filepath_name ${test_examples})
     get_filename_component(src_name ${filepath_name} NAME)

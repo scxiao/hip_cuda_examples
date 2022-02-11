@@ -36,19 +36,18 @@ __global__
 void vec_add(__half *in1, __half *in2, __half *res, int n)
 {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int nglobal = blockDim.x * gridDim.x;
 
-	//__half2* x1 = (__half2*)in1;
-    //__half2* x2 = (__half2*)in2;
-    //__half2* r = (__half2*)res;
-    //for (int i = tid; i < n; i += nglobal)
+    half2* x1 = (half2*)in1;
+    half2* x2 = (half2*)in2;
+    half2* r = (half2*)res;
+    n = n / 2;
     int i = tid;
     if (tid < n)
     {
-        res[i] = __float2half(__half2float(in1[i]) + __half2float(in2[i]));
+        //res[i] = __float2half(__half2float(in1[i]) + __half2float(in2[i]));
         //res[i] = __hadd(in1[i], in2[i]);
         //float r = (float)res[i];
-        //r[i] = __hadd(x1[i], x2[i]);
+        r[i] = __hadd2(x1[i], x2[i]);
     }
 
     return;
@@ -57,7 +56,6 @@ void vec_add(__half *in1, __half *in2, __half *res, int n)
 __global__ void vec_add(float *in1, float *in2, float *res, int n)
 {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    //int nglobal = blockDim.x * gridDim.x;
 
     //for (int i = tid; i < n; i += nglobal)
     int i = tid;
@@ -72,7 +70,6 @@ __global__ void vec_add(float *in1, float *in2, float *res, int n)
 __global__ void vec_add(double *in1, double *in2, double *res, int n)
 {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int nglobal = blockDim.x * gridDim.x;
 
     //for (int i = tid; i < n; i += nglobal)
     int i = tid;
@@ -114,7 +111,7 @@ bool cu_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vect
     cudaMemcpy(cu_in2, in2.data(), mem_size, cudaMemcpyHostToDevice);
     cudaMemcpy(res.data(), in2.data(), mem_size, cudaMemcpyDeviceToHost);
 
-    std::size_t block_size = 1024;
+    std::size_t block_size = 256;
     HRTimer timer;
     timer.start();
     vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
@@ -131,10 +128,55 @@ bool cu_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vect
     return true;
 }
 
+bool cu_vec_add1(const std::vector<__half>& in1, const std::vector<__half>& in2, std::vector<__half>& res) {
+    if (in1.size() != in2.size())
+    {
+        std::cout << "Input vector sizes are different!" << std::endl;
+        return false;
+    }
+
+    using T = __half;
+
+    int n = in1.size();
+    res.resize(n);
+    std::size_t mem_size = n * sizeof(T);
+    T *cu_in1, *cu_in2, *cu_res;
+    cudaMalloc((void **)&cu_in1, mem_size);
+    cudaMalloc((void **)&cu_in2, mem_size);
+    cudaMalloc((void **)&cu_res, mem_size);
+
+    cudaMemcpy(cu_in1, in1.data(), mem_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(cu_in2, in2.data(), mem_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(res.data(), in2.data(), mem_size, cudaMemcpyDeviceToHost);
+
+    std::size_t block_size = 256;
+    HRTimer timer;
+    timer.start();
+    vec_add<<<((n/2 - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    checkCuda(cudaDeviceSynchronize());
+    timer.stop();
+
+    cudaMemcpy(res.data(), cu_res, mem_size, cudaMemcpyDeviceToHost);
+    cudaFree(cu_in1); cudaFree(cu_in2); cudaFree(cu_res);
+
+    std::size_t usec = timer.gettime_us();
+    float throughput = 3.0f * mem_size / usec / 1.0e3;
+    std::cout << typeid(T).name() << " vec_addH, time = " << usec << "us, throughput = " << throughput << "GB/s" << std::endl;
+
+    return true;
+}
+
+
 bool cu_vec_add(const std::vector<__half>& in1, const std::vector<__half>& in2, std::vector<__half>& res)
 {
     return cu_vec_addT(in1, in2, res);
 }
+
+bool cu_vec_addH(const std::vector<__half>& in1, const std::vector<__half>& in2, std::vector<__half>& res)
+{
+    return cu_vec_add1(in1, in2, res);
+}
+
 
 bool cu_vec_add(const std::vector<float>& in1, const std::vector<float>& in2, std::vector<float>& res)
 {
