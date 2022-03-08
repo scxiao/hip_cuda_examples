@@ -22,6 +22,7 @@ public:
     size_t gettime_ms();
     size_t gettime_us();
     void printtime_ms();
+    void printtime_us();
 
 private:
     void dumptime_stream(std::ostream &os);

@@ -48,6 +48,12 @@ std::size_t HRTimer::gettime_us() {
     return usec;
 }
 
+void HRTimer::printtime_us() {
+    auto usec = gettime_us();
+    std::cout << usec;
+}
+
+
 void HRTimer::dumptime_stream(std::ostream &os) {
     if (str_func_name.empty() == false) {
         os << "Function " << str_func_name << " exec time:" << "\t";
