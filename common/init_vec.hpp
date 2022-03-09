@@ -9,7 +9,8 @@ template<class T>
 void init_vec(std::vector<T>& vec, std::size_t num)
 {
     vec.resize(num);
-    srand(time(nullptr));
+    //srand(time(nullptr));
+    srand(1);
     for (size_t i = 0; i < num; ++i)
     {
         float v = 1.0f * rand() / INT_MAX;

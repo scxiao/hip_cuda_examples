@@ -1,5 +1,4 @@
 #include "cu_vec_add.hpp"
-//#include "fp16_conversion.h"
 #include "timer.hpp"
 #include <cuda.h>
 #include <typeinfo>

@@ -1,7 +1,8 @@
 #ifndef __UTILITIES_HPP__
 #define __UTILITIES_HPP__
 
-bool compare(const std::vector<float>& vec1, std::vector<float>& vec2)
+template<class T>
+bool compare(const std::vector<T>& vec1, std::vector<T>& vec2)
 {
     if (vec1.size() != vec2.size())
     {
