@@ -1,36 +1,8 @@
 cmake_minimum_required(VERSION 3.18)
-project (Test_Matmul)
+project (Test_Reduction)
 
-#add_definitions(-D__HIP_PLATFORM_HCC__)
-
-#set (DEPS_FOLDER deps_miopen2.2)
-#set (MIGRAPHX_BUILD ${MIGRAPHX_FOLDER}/build_rocm3.0)
-#set (MIGRAPHX_BUILD ${MIGRAPHX_FOLDER}/build_debug)
-#set (MIGRAPHX_BUILD ${MIGRAPHX_FOLDER}/build)
-#set (MIGRAPHX_DEPS /home/scxiao/Workplace/projects/MIGraph/${DEPS_FOLDER}/lib
-#                   /opt/rocm/lib)
-#set (CMAKE_CXX_COMPILER /usr/local/cuda-11.3/bin/nvcc)
 enable_language(CUDA)
-#find_package(nvcc)
 #set (CMAKE_CXX_STANDARD 11)
-
-#add_custom_target(
-#    copylibs
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/onnx/libmigraphx_onnx.so          ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/libmigraphx.so                    ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/targets/cpu/libmigraphx_cpu.so    ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/targets/gpu/libmigraphx_gpu.so    ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/targets/gpu/libmigraphx_device.so ${MIGRAPHX_LIB_PATH}/.)
-#
-#
-#include_directories(${MIGRAPHX_FOLDER}/src/include
-#                    ${MIGRAPHX_FOLDER}/src/api/include
-#                    ${MIGRAPHX_FOLDER}/src/targets/gpu/include
-#                    ${MIGRAPHX_FOLDER}/src/targets/cpu/include
-#                    ${MIGRAPHX_FOLDER}/src/targets/ref/include
-#                    ${MIGRAPHX_FOLDER}/test/include
-#                    /opt/rocm/include
-#                    /home/scxiao/Workplace/projects/MIGraph/${DEPS_FOLDER}/include)
 
 include_directories(/usr/local/cuda-11.3/include ../common)
 link_directories(/usr/local/cuda-11.3/lib64)
@@ -47,7 +19,7 @@ set(lib_SRC ${util_SRC} ${cu_SRC} ../common/timer.cpp)
 
 message("lib_src = " ${lib_SRC})
 
-set(test_examples test_mm_mul.cpp test_vec_add.cpp)
+set(test_examples test_mm_mul.cpp test_vec_add.cpp test_reduction.cpp)
 add_library(test_util SHARED ${lib_SRC})
 target_link_libraries(test_util cudart)
 #set_property(TARGET test_util PROPERTY CUDA_ARCHITECTURES 61 70 75)
