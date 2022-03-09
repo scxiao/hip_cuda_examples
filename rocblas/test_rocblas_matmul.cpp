@@ -23,16 +23,17 @@ int main(int argc, char **argv) {
     CMatrix<double> matrix1(i, k), matrix2(k, j), matrix3(i, j), res_matrix1, res_matrix2;
     HRTimer timer;
 
-    timer.start();
-    bool ret = matrix1.multiply_optim(matrix2, res_matrix1);
-    if (ret == false) {
-        cout << "matrix dimension is incorrect, cannot multiplication." << endl;
-        return 1;
-    }
-    timer.stop();
-    cout << "Sequential time = ";
-    timer.printtime_ms();
+//    timer.start();
+//    bool ret = matrix1.multiply_optim(matrix2, res_matrix1);
+//    if (ret == false) {
+//        cout << "matrix dimension is incorrect, cannot multiplication." << endl;
+//        return 1;
+//    }
+//    timer.stop();
+//    cout << "Sequential time = ";
+//    timer.printtime_ms();
 
+    bool ret = true;
     size_t num = 32;
     while (num <= thread_num) {
         timer.start();
@@ -46,18 +47,18 @@ int main(int argc, char **argv) {
         cout << "Parallel time with " << num << " threads = ";
         timer.printtime_ms();
 
-        ret = (res_matrix1 == res_matrix2);
-        if (ret == false) {
-            cout << "FAILED with " << num << " threads." << endl;
-            return 1;
-        }
+        //ret = (res_matrix1 == res_matrix2);
+        //if (ret == false) {
+        //    cout << "FAILED with " << num << " threads." << endl;
+        //    return 1;
+        //}
 
         num *= 2;
     }
 
-    // call hip naive implementation to run on GPU
+    // call rocblas api for matrix multiplication GPU
     timer.start();
-    ret = rocblas_matmul(matrix1, matrix2, matrix3, res_matrix2);
+    ret = rocblas_matmul(matrix1, matrix2, matrix3, res_matrix1);
     if (ret == false) {
         cout << "cu_matrix_mul_naive failed, Matrix dimension mismatch!" << endl;
         return 1;

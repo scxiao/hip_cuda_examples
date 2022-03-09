@@ -1,6 +1,9 @@
 #ifndef __UTILITIES_HPP__
 #define __UTILITIES_HPP__
 
+#include <hip/hip_fp16.h>
+#include <hip/hip_runtime.h>
+
 template<class T>
 bool compare(const std::vector<T>& vec1, std::vector<T>& vec2)
 {
@@ -15,9 +18,11 @@ bool compare(const std::vector<T>& vec1, std::vector<T>& vec2)
     bool ret = true;
     for (int i = 0; i < size; ++i)
     {
-        if (vec1[i] - vec2[i] > eps or vec1[i] - vec2[i] < -eps)
+        float v1 = static_cast<float>(vec1[i]);
+        float v2 = static_cast<float>(vec2[i]);
+        if (v1 - v2 > eps or v1 - v2 < -eps)
         {
-            std::cout << "(x[" << i << "] = " << vec1[i] << ") != (y[" << i << "] = " << vec2[i] << ")" << std::endl;
+            std::cout << "(x[" << i << "] = " << v1 << ") != (y[" << i << "] = " << v2 << ")" << std::endl;
             ret = false;
         }
     }

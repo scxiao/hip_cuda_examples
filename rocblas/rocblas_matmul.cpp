@@ -32,8 +32,8 @@ bool rocblas_matmul(CMatrix<double> &in1, CMatrix<double> &in2, CMatrix<double> 
     res.resize(row, column);
 
     auto handle = create_rocblas_handle();
-    double alpha = 1.0;
-    double beta = 1.0;
+    double alpha = 3.0;
+    double beta = 2.0;
 
     double *hip_in1, *hip_in2, *hip_in3, *hip_res;
     hipMalloc((void **)&hip_in1, sizeof(double) * row * dim1);
@@ -46,6 +46,7 @@ bool rocblas_matmul(CMatrix<double> &in1, CMatrix<double> &in2, CMatrix<double> 
     hipMemcpy(hip_in2, in2.get_buffer(), sizeof(double) * dim2 * column, hipMemcpyHostToDevice);
     hipMemcpy(hip_in3, in3.get_buffer(), sizeof(double) * row * column, hipMemcpyHostToDevice);
 
+    // warm up of the api call
     auto ret = rocblas_gemm_ex(handle,
                                rocblas_operation_none,
                                rocblas_operation_none,
@@ -74,6 +75,7 @@ bool rocblas_matmul(CMatrix<double> &in1, CMatrix<double> &in2, CMatrix<double> 
                                nullptr);
     hipDeviceSynchronize();
     hipMemset(hip_res, 0, sizeof(double) * row * column);
+
     HRTimer timer;
     timer.start();
     ret = rocblas_gemm_ex(handle,
