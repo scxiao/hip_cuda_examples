@@ -58,7 +58,7 @@ void HRTimer::dumptime_stream(std::ostream &os) {
     if (str_func_name.empty() == false) {
         os << "Function " << str_func_name << " exec time:" << "\t";
     }
-    os << milli_sec << "ms" << std::endl;
+    os << milli_sec << " ms" << std::endl;
     m_bDumpedTime = true;
 }
 

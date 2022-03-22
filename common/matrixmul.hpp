@@ -56,6 +56,7 @@ public:
     bool multiply_parallel(CMatrix<T> &matrix, size_t thread_num, CMatrix<T> &res_matrix);
     
     bool operator == (const CMatrix<T> &matrix);
+    bool operator != (const CMatrix<T> &matrix);
 
 private:
      // thread function to calculate partial matrix
@@ -275,6 +276,11 @@ bool CMatrix<T>::operator == (const CMatrix<T> &matrix) {
     }
 
     return true;
+}
+
+template<class T>
+bool CMatrix<T>::operator != (const CMatrix<T> &matrix) {
+    return not(*this == matrix);
 }
 
 #endif
