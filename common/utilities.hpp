@@ -1,8 +1,12 @@
 #ifndef __UTILITIES_HPP__
 #define __UTILITIES_HPP__
 
+#if (defined(__NVCC__))
+#include <cuda_fp16.h>
+#else
 #include <hip/hip_fp16.h>
 #include <hip/hip_runtime.h>
+#endif
 
 template<class T>
 bool compare(const std::vector<T>& vec1, std::vector<T>& vec2)

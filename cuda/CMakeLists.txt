@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 project (Test_Reduction)
 
+add_definitions(-D__NVCC__)
 enable_language(CUDA)
 #set (CMAKE_CXX_STANDARD 11)
 

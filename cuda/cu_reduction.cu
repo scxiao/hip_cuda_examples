@@ -302,7 +302,7 @@ bool reduction3(const std::vector<T>& in, std::vector<T>& out)
 
 // Reduction 4
 template<class T>
-__device__ void warpReduce(T *sdata, int tid)
+__device__ void warpReduce(volatile T *sdata, int tid)
 {
     sdata[tid] += sdata[tid + 32];
     sdata[tid] += sdata[tid + 16];
@@ -313,7 +313,7 @@ __device__ void warpReduce(T *sdata, int tid)
 }
 
 template<>
-__device__ void warpReduce(__half *sdatav, int tid)
+__device__ void warpReduce(volatile __half *sdatav, int tid)
 {
     __half* sdata = (__half*)sdatav;
     sdata[tid] += sdata[tid + 32];
@@ -328,13 +328,6 @@ __device__ void warpReduce(__half *sdatav, int tid)
     __syncthreads();
     sdata[tid] += sdata[tid + 1];
     __syncthreads();
-
-    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 32]));
-    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 16]));
-    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 8]));
-    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 4]));
-    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 2]));
-    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 1]));
 }
 
 template<class T>
@@ -411,6 +404,135 @@ bool reduction4(const std::vector<T>& in, std::vector<T>& out)
 
     return true;
 }
+
+// Reduction 5
+//template<class T, unsigned int blockSize>
+//__device__ void warpReduce5(volatile T *sdata, int tid)
+//{
+//    if(blockSize >= 64) sdata[tid] += sdata[tid + 32];
+//    if(blockSize >= 32) sdata[tid] += sdata[tid + 16];
+//    if(blockSize >= 16) sdata[tid] += sdata[tid + 8];
+//    if(blockSize >=  8) sdata[tid] += sdata[tid + 4];
+//    if(blockSize >=  4) sdata[tid] += sdata[tid + 2];
+//    if(blockSize >=  2) sdata[tid] += sdata[tid + 1];
+//}
+//
+//template<>
+//__device__ void warpReduce5(volatile __half *sdatav, int tid)
+//{
+//    __half* sdata = (__half*)sdatav;
+//    sdata[tid] += sdata[tid + 32];
+//    __syncthreads();
+//    sdata[tid] += sdata[tid + 16];
+//    __syncthreads();
+//    sdata[tid] += sdata[tid + 8];
+//    __syncthreads();
+//    sdata[tid] += sdata[tid + 4];
+//    __syncthreads();
+//    sdata[tid] += sdata[tid + 2];
+//    __syncthreads();
+//    sdata[tid] += sdata[tid + 1];
+//    __syncthreads();
+//
+//    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 32]));
+//    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 16]));
+//    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 8]));
+//    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 4]));
+//    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 2]));
+//    //sdata[tid] = __float2half(__half2float(sdata[tid]) +  __half2float(sdata[tid + 1]));
+//}
+//
+//template<class T, unsigned int blockSize>
+//__global__ void reduce5(T* g_idata, T* g_odata)
+//{
+//    extern __shared__ T sdata4[];
+//    unsigned int tid = threadIdx.x;
+//
+//    if (blockSize >= 512) {
+//        if (tid < 256) sdata[tid] += sdata[tid + 256];
+//        __syncthreads();
+//    }
+//    if (blockSize >= 256) {
+//        if (tid < 128) sdata[tid] += sdata[tid + 128];
+//        __syncthreads();
+//    }
+//    if (blockSize >= 128) {
+//        if (tid < 64) sdata[tid] += sdata[tid + 64];
+//        __syncthreads();
+//    }
+//    if (tid < 32) warpReduce5<blockSize>(sdata, tid);
+//
+//    unsigned int i = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+//    sdata4[tid] = g_idata[i] + g_idata[i + blockDim.x];
+//    __syncthreads();
+//
+//    for (unsigned int s = blockDim.x / 2; s > 32; s /= 2)
+//    {
+//        if (tid < s)
+//        {
+//            sdata4[tid] += sdata4[tid + s];
+//        }
+//        __syncthreads();
+//    }
+//
+//    if (tid < 32) warpReduce(sdata4, tid);
+//
+//    if (tid == 0) g_odata[blockIdx.x] = sdata4[0];
+//}
+//
+//
+//template<>
+//__global__ void reduce5(__half* g_idata, __half* g_odata)
+//{
+//    extern __shared__ __half sdatah[];
+//    unsigned int tid = threadIdx.x;
+//    unsigned int i = blockIdx.x * blockDim.x * 2 + threadIdx.x;
+//    sdatah[tid] = g_idata[i] + g_idata[i + blockDim.x];
+//    __syncthreads();
+//
+//    for (unsigned int s = blockDim.x / 2; s > 32; s /= 2)
+//    {
+//        if (tid < s)
+//        {
+//            sdatah[tid] += sdatah[tid + s];
+//        }
+//        __syncthreads();
+//    }
+//
+//    if (tid < 32) warpReduce(sdatah, tid);
+//
+//    if (tid == 0) g_odata[blockIdx.x] = sdatah[0];
+//}
+//
+//template<class T>
+//bool reduction5(const std::vector<T>& in, std::vector<T>& out)
+//{
+//    auto in_size = sizeof(T) * in.size();
+//    int block_size = 1024;
+//    auto out_size = in_size / block_size;
+//    out.resize(out_size);
+//
+//    HRTimer timer;
+//
+//    T* in_d, *out_d;
+//    cudaMalloc((void**)&in_d, in_size);
+//    cudaMalloc((void**)&out_d, out_size);
+//
+//    cudaMemcpy(in_d, in.data(), in_size, cudaMemcpyHostToDevice);
+//    int block_num = in.size() / block_size;
+//    std::cout << "block_num = " << block_num << ", block_size = " << block_size << std::endl;
+//    timer.start();
+//    reduce4<T><<<block_num, block_size / 2, block_size * sizeof(T) / 2>>>(in_d, out_d);
+//    cudaDeviceSynchronize();
+//    timer.stop();
+//    auto num_us = timer.gettime_us();
+//    calc_mem_throughput("Reduction4", in_size, out_size, num_us);
+//
+//    cudaMemcpy(out.data(), out_d, out_size, cudaMemcpyDeviceToHost);
+//
+//    return true;
+//}
+
 
 bool reduction0(const std::vector<float>& in, std::vector<float>& out)
 {
