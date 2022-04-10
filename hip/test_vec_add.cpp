@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     srand(time(nullptr));
     std::vector<double> din1, din2, dres;
     std::vector<float> fin1, fin2, fres;
-    std::vector<half> hin1, hin2, hres, hresH;
+    std::vector<half> hin1, hin2, hres, h2res;
     din1.resize(n);
     din2.resize(n);
     dres.resize(n);
@@ -48,8 +48,8 @@ int main(int argc, char **argv) {
     bool dret = hip_vec_add(din1, din2, dres);
     bool fret = hip_vec_add(fin1, fin2, fres);
     bool hret = hip_vec_add(hin1, hin2, hres);
-    bool hretH = hip_vec_add(hin1, hin2, hresH);
-    if (not (dret and fret and hret and hretH))
+    bool h2ret = hip_vec_addh2(hin1, hin2, h2res);
+    if (not (dret and fret and hret and h2ret))
     {
         std::cout << "vector add error!" << std::endl;
         return 1;
@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         float d = dres[i];
         float f = fres[i];
         float h = hres[i];
-        float hH = hresH[i];
+        float hH = h2res[i];
 
         if (fabs(d - f) > 0.01f or fabs(d - h) > 0.01f or fabs(f - h) > 0.01f or fabs(h - hH) > 0.01f)
         {

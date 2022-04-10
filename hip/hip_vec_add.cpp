@@ -7,12 +7,12 @@
 using namespace std;
 
 
+
+// half data type
 __global__ 
 void vec_add(__half *in1, __half *in2, __half *res, int n)
 {
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
-
-    int i = tid;
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < n)
     {
         res[i] = __float2half(__half2float(in1[i]) + __half2float(in2[i]));
@@ -21,31 +21,10 @@ void vec_add(__half *in1, __half *in2, __half *res, int n)
     return;
 }
 
-__global__ 
-void vec_addH(__half *in1, __half *in2, __half *res, int n)
-{
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
-
-    int i = tid;
-    if (i < n)
-    {
-        half2* h1 = (half2*)in1;
-        half2* h2 = (half2*)in2;
-        half2 *r = (half2*)res;
-        r[i] = __hadd2(h1[i], h2[i]);
-    }
-
-    return;
-}
-
 
 __global__ void vec_add(float *in1, float *in2, float *res, int n)
 {
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int nglobal = blockDim.x * gridDim.x;
-
-    //for (int i = tid; i < n; i += nglobal)
-    int i = tid;
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < n)
     {
         res[i] = in1[i] + in2[i];
@@ -56,14 +35,26 @@ __global__ void vec_add(float *in1, float *in2, float *res, int n)
 
 __global__ void vec_add(double *in1, double *in2, double *res, int n)
 {
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int nglobal = blockDim.x * gridDim.x;
-
-    //for (int i = tid; i < n; i += nglobal)
-    int i = tid;
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
     if (i < n)
     {
         res[i] = in1[i] + in2[i];
+    }
+
+    return;
+}
+
+// half2 data type
+__global__ 
+void vec_addh2(__half *in1, __half *in2, __half *res, int n)
+{
+    half2* h1 = (half2*)in1;
+    half2* h2 = (half2*)in2;
+    half2 *r = (half2*)res;
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    if (i < n)
+    {
+       r[i] = __hadd2(h1[i], h2[i]);
     }
 
     return;
@@ -116,7 +107,7 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
     return true;
 }
 
-bool hip_vec_add1(const std::vector<__half>& in1, const std::vector<__half>& in2, std::vector<__half>& res) {
+bool hip_vec_addh2(const std::vector<__half>& in1, const std::vector<__half>& in2, std::vector<__half>& res) {
     if (in1.size() != in2.size())
     {
         std::cout << "Input vector sizes are different!" << std::endl;
@@ -137,10 +128,10 @@ bool hip_vec_add1(const std::vector<__half>& in1, const std::vector<__half>& in2
     hipMemcpy(cu_in2, in2.data(), mem_size, hipMemcpyHostToDevice);
     hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
 
-    std::size_t block_size = 512;
+    std::size_t block_size = 1024;
     HRTimer timer;
     timer.start();
-    vec_addH<<<((n/2 - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
     checkHip(hipDeviceSynchronize());
     timer.stop();
 
@@ -149,7 +140,7 @@ bool hip_vec_add1(const std::vector<__half>& in1, const std::vector<__half>& in2
 
     std::size_t usec = timer.gettime_us();
     float throughput = 3.0f * mem_size / usec / 1.0e3;
-    std::cout << typeid(T).name() << " vec_add2, time = " << usec << "us, throughput = " << throughput << "GB/s" << std::endl;
+    std::cout << "half2, vec_add time = " << usec << "us, throughput = " << throughput << "GB/s" << std::endl;
 
     return true;
 }
@@ -158,11 +149,6 @@ bool hip_vec_add1(const std::vector<__half>& in1, const std::vector<__half>& in2
 bool hip_vec_add(const std::vector<__half>& in1, const std::vector<__half>& in2, std::vector<__half>& res)
 {
     return hip_vec_addT(in1, in2, res);
-}
-
-bool hip_vec_addH(const std::vector<__half>& in1, const std::vector<__half>& in2, std::vector<__half>& res)
-{
-    return hip_vec_add1(in1, in2, res);
 }
 
 bool hip_vec_add(const std::vector<float>& in1, const std::vector<float>& in2, std::vector<float>& res)
