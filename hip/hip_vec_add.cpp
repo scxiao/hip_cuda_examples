@@ -88,7 +88,7 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
 
     hipMemcpy(cu_in1, in1.data(), mem_size, hipMemcpyHostToDevice);
     hipMemcpy(cu_in2, in2.data(), mem_size, hipMemcpyHostToDevice);
-    hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
+    //hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
 
     std::size_t block_size = 512;
     HRTimer timer;
@@ -126,7 +126,7 @@ bool hip_vec_addh2(const std::vector<__half>& in1, const std::vector<__half>& in
 
     hipMemcpy(cu_in1, in1.data(), mem_size, hipMemcpyHostToDevice);
     hipMemcpy(cu_in2, in2.data(), mem_size, hipMemcpyHostToDevice);
-    hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
+    //hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
 
     std::size_t block_size = 1024;
     HRTimer timer;
