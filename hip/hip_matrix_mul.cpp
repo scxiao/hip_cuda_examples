@@ -61,9 +61,40 @@ bool hip_matrix_mul_naive(CMatrix<double> &in1, CMatrix<double> &in2, CMatrix<do
     return true;
 }
 
-#define BLOCK_SIZE 8
+#define BLOCK_SIZE 32
 
 __global__ void hipkernel_matrix_mul_shared(double *in1, double *in2, double *res,
+        size_t row, size_t dim, size_t column) {
+    __shared__ double in_shared1[BLOCK_SIZE][BLOCK_SIZE];
+    __shared__ double in_shared2[BLOCK_SIZE][BLOCK_SIZE];
+    //HIP_DYNAMIC_SHARED(double, in_shared1);
+    //HIP_DYNAMIC_SHARED(double, in_shared2);
+
+    size_t b_idx = blockIdx.x;
+    size_t b_idy = blockIdx.y;
+    size_t t_idx = threadIdx.x;
+    size_t t_idy = threadIdx.y;
+
+    double sum = 0.0;
+    for (size_t tile_idx = 0; tile_idx < dim; tile_idx += BLOCK_SIZE) {
+        in_shared1[t_idx][t_idy] = in1[(b_idx * BLOCK_SIZE + t_idx) * dim + tile_idx + t_idy];
+        in_shared2[t_idx][t_idy] = in2[(tile_idx + t_idx) * column + b_idy * BLOCK_SIZE + t_idy];
+        __syncthreads();
+
+        for (size_t idx = 0; idx < BLOCK_SIZE; idx++) {
+            sum += in_shared1[t_idx][idx] * in_shared2[idx][t_idy];
+        }
+        __syncthreads();
+    }
+    
+    int idx_x = blockDim.x * blockIdx.x + threadIdx.x;
+    int idx_y = blockDim.y * blockIdx.y + threadIdx.y;
+    res[idx_x * column + idx_y] = sum;
+
+    return;
+}
+
+__global__ void hipkernel_matrix_mul_dynamic_shared(double *in1, double *in2, double *res,
         size_t row, size_t dim, size_t column) {
     //__shared__ double in_shared1[BLOCK_SIZE][BLOCK_SIZE];
     //__shared__ double in_shared2[BLOCK_SIZE][BLOCK_SIZE];
@@ -118,7 +149,12 @@ bool hip_matrix_mul_shared(CMatrix<double> &in1, CMatrix<double> &in2, CMatrix<d
     hipLaunchKernelGGL(hipkernel_matrix_mul_shared, 
             dim3((row + tile_size - 1)/tile_size, (column + tile_size - 1)/tile_size), 
             dim3(tile_size, tile_size),
-                    sizeof(double) * tile_size * tile_size, 0, hip_in1, hip_in2, hip_res, row, dim1, column);
+                    2 * sizeof(double) * tile_size * tile_size, 0, hip_in1, hip_in2, hip_res, row, dim1, column);
+    hipError_t ret = hipGetLastError();
+    if (ret != hipSuccess) {
+	std::cout << "matrix_mul_shared, kernel launch error, code = " << ret << std::endl;
+	std::cout << "Error info: " << hipGetErrorString(ret) << std::endl;
+    }
     hipMemcpy(res.get_buffer(), hip_res, sizeof(double) * row * column, hipMemcpyDeviceToHost);
 
     hipFree(hip_in1); hipFree(hip_in2); hipFree(hip_res);
