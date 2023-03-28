@@ -4,6 +4,14 @@
 #include <ctime>
 #include <cmath>
 #include <climits>
+#include <vector>
+
+#if (defined(__NVCC__))
+#include <cuda_fp16.h>
+#else
+#include <hip/hip_fp16.h>
+#include <hip/hip_runtime.h>
+#endif
 
 template<class T>
 void init_vec(std::vector<T>& vec, std::size_t num)

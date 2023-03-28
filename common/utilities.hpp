@@ -1,6 +1,7 @@
 #ifndef __UTILITIES_HPP__
 #define __UTILITIES_HPP__
 
+#include <vector>
 #if (defined(__NVCC__))
 #include <cuda_fp16.h>
 #else

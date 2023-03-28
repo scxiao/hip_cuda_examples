@@ -4,15 +4,7 @@ project (Test_Matmul)
 add_definitions(-D__HIP_PLATFORM_AMD__)
 
 set (CMAKE_CXX_COMPILER /opt/rocm/hip/bin/hipcc)
-set (CMAKE_CXX_STANDARD 11)
-
-#add_custom_target(
-#    copylibs
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/onnx/libmigraphx_onnx.so          ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/libmigraphx.so                    ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/targets/cpu/libmigraphx_cpu.so    ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/targets/gpu/libmigraphx_gpu.so    ${MIGRAPHX_LIB_PATH}/.
-#	COMMAND cp ${MIGRAPHX_BUILD}/src/targets/gpu/libmigraphx_device.so ${MIGRAPHX_LIB_PATH}/.)
+set (CMAKE_CXX_STANDARD 14)
 
 include_directories(/opt/rocm/hip/include ../common)
 link_directories(/opt/rocm/hip/lib)
@@ -30,7 +22,7 @@ set(lib_SRC ${util_SRC} ../common/timer.cpp)
 message("lib_src = " ${lib_SRC})
 
 #set(test_examples test_mm_mul.cpp test_vec_add.cpp)
-set(test_examples test_mm_mul.cpp test_vec_add.cpp test_reduction.cpp test_sqrt.cpp)
+set(test_examples test_mm_mul.cpp test_vec_add.cpp test_reduction.cpp test_sqrt.cpp test_layernorm.cpp)
 add_library(test_util SHARED ${lib_SRC})
 target_link_libraries(test_util amdhip64)
 
