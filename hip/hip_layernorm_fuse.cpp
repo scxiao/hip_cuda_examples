@@ -215,15 +215,3 @@ void triadd_layernorm_half_wrapper(const std::vector<__half>& in,
 
         hipMemcpy((void*)out.data(), out_d, size, hipMemcpyDeviceToHost);
 }
-
-// void init_vec(std::vector<__half>& vec, std::size_t num)
-// {
-//     vec.resize(num);
-//     //srand(time(nullptr));
-//     srand(1);
-//     for (size_t i = 0; i < num; ++i)
-//     {
-//         float v = 1.0f * rand() / INT_MAX;
-//         vec[i] = v;
-//     }
-// }

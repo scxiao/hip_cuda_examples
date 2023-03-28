@@ -13,6 +13,4 @@ void triadd_layernorm_half_wrapper(const std::vector<__half>& in,
                                     std::vector<__half>& out,
                                     int batch_size);
 
-// void init_vec(std::vector<__half>& vec, std::size_t num);
-
 #endif
