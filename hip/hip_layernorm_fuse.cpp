@@ -34,8 +34,8 @@ __device__ __half2 block_reduce_half2(
 // m / sqrt(mean(m ^ 2) + 1e-12)
 __device__ void layernorm_kernel_half2(__half2* in_data,
                                        __half2* in_data_reduce,
-                                       __half2* w_data,
-                                       __half2* b_data,
+                                       __half2* w,
+                                       __half2* b,
                                        float*   m_data,
                                        float*   v_data,
                                        __half2* out,
@@ -69,7 +69,7 @@ __device__ void layernorm_kernel_half2(__half2* in_data,
     {
         int idx  = i + start;
         auto o2 = __hmul2(in_data[i], r);
-        out[idx] = __hadd2(__hmul2(o2, w_data[i]), b_data[i]);
+        out[idx] = __hadd2(__hmul2(o2, w[i]), b[i]);
     }
 }
 

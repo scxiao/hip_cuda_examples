@@ -17,8 +17,8 @@ int main(int argc, char** argv) {
 
     std::vector<__half> in, w, bias;
     init_vec(in, elem_num);
-    init_vec(w, batches);
-    init_vec(bias, batches);
+    init_vec(w, batch_size);
+    init_vec(bias, batch_size);
 
     std::vector<__half> out_half, out_half2;
     std::vector<float> mean_half, mean_half2;
