@@ -6,7 +6,7 @@
 #include <hip/hip_fp16.h>
 
 void layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
-                                    const std::vector<__half>& w;
+                                    const std::vector<__half>& w,
                                     const std::vector<__half>& bias,
                                     std::vector<float>& mean,
                                     std::vector<float>& var,
@@ -14,7 +14,7 @@ void layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
                                     int batch_size);
 
 void layernorm_fuse_half_wrapper(const std::vector<__half>& in, 
-                                    const std::vector<__half>& w;
+                                    const std::vector<__half>& w,
                                     const std::vector<__half>& bias,
                                     std::vector<float>& mean,
                                     std::vector<float>& var,

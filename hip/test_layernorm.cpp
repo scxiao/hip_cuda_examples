@@ -7,6 +7,7 @@
 int main(int argc, char** argv) {
     if (argc != 3) {
         std::cout << "Usage: " << argv[0] << " batchs batch_size" << std::endl;
+        return 0;
     }
 
     size_t batches = std::atoi(argv[1]);

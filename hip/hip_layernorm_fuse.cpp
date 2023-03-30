@@ -30,8 +30,6 @@ __device__ __half2 block_reduce_half2(
     return op(lows2, highs2);
 }
 
-
-
 // m = x - mean(x)
 // m / sqrt(mean(m ^ 2) + 1e-12)
 __device__ void layernorm_kernel_half2(__half2* in_data,
@@ -50,6 +48,7 @@ __device__ void layernorm_kernel_half2(__half2* in_data,
     auto m =
         block_reduce_half2(in_data_reduce, batch_item_num, threadIdx.x, block_size, half2_sum{});
     m = __hmul2(m, rnum);
+    *m_data = __low2float(m);
 
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
@@ -63,14 +62,14 @@ __device__ void layernorm_kernel_half2(__half2* in_data,
     auto eps = __float2half2_rn(1.0e-12f);
     auto r   = __hadd2(m, eps);
     r        = h2rsqrt(r);
-    *m_data = __high2float(m);
-    *v_data = 1.0f / __high2float(r);
+    *v_data = __low2float(r);
 
     int start = blockIdx.x * batch_item_num;
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
         int idx  = i + start;
-        out[idx] = __hadd2(__hmul2(__hmul2(in_data[i], r), w_data[i]), b_data[i]);
+        auto o2 = __hmul2(in_data[i], r);
+        out[idx] = __hadd2(__hmul2(o2, w_data[i]), b_data[i]);
     }
 }
 
@@ -131,6 +130,7 @@ __device__ void layernorm_kernel_half(__half* in_data,
 {
     auto m = block_reduce_half(in_data_reduce, batch_item_num, threadIdx.x, block_size);
     m *= rnum;
+    *m_data = m;
 
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
@@ -139,19 +139,17 @@ __device__ void layernorm_kernel_half(__half* in_data,
     }
 
     m = block_reduce_half(in_data_reduce, batch_item_num, threadIdx.x, block_size);
-    *m_data = m;
-
     m *= rnum;
     m += 1.0e-12f;
-    m = sqrt(__half2float(m));
-    *v_data = m;
+    auto rstd = rsqrt(__half2float(m));
+    *v_data = rstd;
 
-    auto r = __float2half(m);
     int start = blockIdx.x * batch_item_num;
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
         int idx  = i + start;
-        out[idx] = __float2half(__half2float(in_data[i]) * __half2float(r) * __half2float(w[i]) + __half2float(b[i]));
+        auto o2 = __half2float(in_data[i]) * rstd;
+        out[idx] = __float2half(o2 * __half2float(w[i]) + __half2float(b[i]));
     }
 }
 
@@ -176,7 +174,7 @@ __global__ void layernorm_half(void* in, void *w, void *b, float *m, float *v, v
         in_data_reduce[i] = in_data[i];
     }
 
-    layernorm_kernel_half(in_data, in_data_reduce, ww, bb, m, v, output, batch_item_num, block_size, rnum);
+    layernorm_kernel_half(in_data, in_data_reduce, ww, bb, &m[blockIdx.x], &v[blockIdx.x], output, batch_item_num, block_size, rnum);
 }
 
 static size_t compute_block_size(int n, int max_block_size)

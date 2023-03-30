@@ -25,7 +25,14 @@ set(lib_SRC ${util_SRC} ../common/timer.cpp)
 
 message("lib_src = " ${lib_SRC})
 
-set(test_examples test_mm_mul.cpp test_vec_add.cpp test_reduction.cpp test_sqrt.cpp test_layernorm.cpp)
+set(test_examples 
+    test_mm_mul.cpp 
+    test_vec_add.cpp 
+    test_reduction.cpp 
+    test_sqrt.cpp 
+    test_layernorm.cpp
+    test_layernorm_fuse.cpp)
+
 add_library(test_util SHARED ${lib_SRC})
 target_link_libraries(test_util ${HIP_LIBRARY})
 
