@@ -2,7 +2,7 @@
 #include <init_vec.hpp>
 #include <utilities.hpp>
 
-#include "hip_layernorm_fuse.hpp"
+#include "hip_layernorm.hpp"
 
 int main(int argc, char** argv) {
     if (argc != 3) {
@@ -17,8 +17,8 @@ int main(int argc, char** argv) {
     std::vector<__half> in, out_half2, out_half;
     init_vec(in, elem_num);
 
-    triadd_layernorm_half2_wrapper(in, out_half2, batch_size);
-    triadd_layernorm_half_wrapper(in, out_half, batch_size);
+    layernorm_half2_wrapper(in, out_half2, batch_size);
+    layernorm_half_wrapper(in, out_half, batch_size);
 
     if (compare(out_half, out_half2)) {
         std::cout << "PASSED!" << std::endl;

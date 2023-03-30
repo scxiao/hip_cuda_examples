@@ -36,6 +36,10 @@ __device__ __half2 block_reduce_half2(
 // m / sqrt(mean(m ^ 2) + 1e-12)
 __device__ void layernorm_kernel_half2(__half2* in_data,
                                        __half2* in_data_reduce,
+                                       __half2* w_data,
+                                       __half2* b_data,
+                                       float*   m_data,
+                                       float*   v_data,
                                        __half2* out,
                                        int batch_item_num,
                                        int block_size,
@@ -59,18 +63,23 @@ __device__ void layernorm_kernel_half2(__half2* in_data,
     auto eps = __float2half2_rn(1.0e-12f);
     auto r   = __hadd2(m, eps);
     r        = h2rsqrt(r);
+    *m_data = __high2float(m);
+    *v_data = 1.0f / __high2float(r);
 
     int start = blockIdx.x * batch_item_num;
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
         int idx  = i + start;
-        out[idx] = __hmul2(in_data[i], r);
+        out[idx] = __hadd2(__hmul2(__hmul2(in_data[i], r), w_data[i]), b_data[i]);
     }
 }
 
-__global__ void layernorm_half2(void* in, void* data_out, int batch_item_num, int block_size)
+__global__ void layernorm_half2(void* in, void* w, void* b, float* m, float *v, void* data_out, int batch_item_num, int block_size)
 {
     __half2* input = reinterpret_cast<__half2*>(in);
+    __half2* ww = reinterpret_cast<__half2*>(w);
+    __half2* bb = reinterpret_cast<__half2*>(b);
+
     __half2* output = reinterpret_cast<__half2*>(data_out);
     float rnum      = 1.0f / batch_item_num;
     batch_item_num /= 2;
@@ -78,7 +87,8 @@ __global__ void layernorm_half2(void* in, void* data_out, int batch_item_num, in
     __half2* in_data_reduce = buffer2;
     __half2* in_data        = buffer2 + batch_item_num;
 
-    int start = blockIdx.x * batch_item_num;
+    int bid = blockIdx.x;
+    int start = bid * batch_item_num;
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
         int idx           = i + start;
@@ -86,7 +96,7 @@ __global__ void layernorm_half2(void* in, void* data_out, int batch_item_num, in
         in_data_reduce[i] = in_data[i];
     }
 
-    layernorm_kernel_half2(in_data, in_data_reduce, output, batch_item_num, block_size, rnum);
+    layernorm_kernel_half2(in_data, in_data_reduce, ww, bb, &m[bid], &v[bid], output, batch_item_num, block_size, rnum);
 }
 
 template <class T>
@@ -110,6 +120,10 @@ block_reduce_half(T* buffer, int batch_item_num, int tid, int block_size)
 // m / sqrt(mean(m ^ 2) + 1e-12)
 __device__ void layernorm_kernel_half(__half* in_data,
                                       __half* in_data_reduce,
+                                      __half* w,
+                                      __half* b,
+                                      float* m_data,
+                                      float* v_data,
                                       __half* out,
                                       int batch_item_num,
                                       int block_size,
@@ -125,24 +139,29 @@ __device__ void layernorm_kernel_half(__half* in_data,
     }
 
     m = block_reduce_half(in_data_reduce, batch_item_num, threadIdx.x, block_size);
+    *m_data = m;
+
     m *= rnum;
     m += 1.0e-12f;
+    m = sqrt(__half2float(m));
+    *v_data = m;
 
-    auto r = __float2half(rsqrt(__half2float(m)));
-
+    auto r = __float2half(m);
     int start = blockIdx.x * batch_item_num;
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
         int idx  = i + start;
-        out[idx] = __float2half(__half2float(in_data[i]) * __half2float(r));
+        out[idx] = __float2half(__half2float(in_data[i]) * __half2float(r) * __half2float(w[i]) + __half2float(b[i]));
     }
 }
 
 // m = x - mean(x)
 // m / sqrt(mean(m ^ 2) + 1e-12)
-__global__ void layernorm_half(void* in, void* data_out, int batch_item_num, int block_size)
+__global__ void layernorm_half(void* in, void *w, void *b, float *m, float *v, void* data_out, int batch_item_num, int block_size)
 {
     __half* input = reinterpret_cast<__half*>(in);
+    __half* ww = reinterpret_cast<__half*>(w);
+    __half* bb = reinterpret_cast<__half*>(b);
     __half* output = reinterpret_cast<__half*>(data_out);
     float rnum     = 1.0f / batch_item_num;
     extern __shared__ __half bufferh[];
@@ -157,7 +176,7 @@ __global__ void layernorm_half(void* in, void* data_out, int batch_item_num, int
         in_data_reduce[i] = in_data[i];
     }
 
-    layernorm_kernel_half(in_data, in_data_reduce, output, batch_item_num, block_size, rnum);
+    layernorm_kernel_half(in_data, in_data_reduce, ww, bb, m, v, output, batch_item_num, block_size, rnum);
 }
 
 static size_t compute_block_size(int n, int max_block_size)
@@ -168,50 +187,91 @@ static size_t compute_block_size(int n, int max_block_size)
     return block_size;
 }
 
-void triadd_layernorm_half2_wrapper(const std::vector<__half>& in, 
+void layernorm_fuse_half2_wrapper(const std::vector<__half>& in, 
+                                    const std::vector<__half>& w,
+                                    const std::vector<__half>& bias,
+                                    std::vector<float>& mean,
+                                    std::vector<float>& var,
                                     std::vector<__half>& out,
                                     int batch_size) 
 {
-        int elem_num = in.size();
-        out.resize(elem_num);
-        auto block_size       = compute_block_size(batch_size, 1024);
-        int block_num         = elem_num / batch_size;
-        int shared_size       = batch_size * 2 * sizeof(__half);
-        auto half2_block_size = block_size / 4;
+    int elem_num = in.size();
+    out.resize(elem_num);
+    auto block_size       = compute_block_size(batch_size, 1024);
+    int block_num         = elem_num / batch_size;
+    int shared_size       = batch_size * 2 * sizeof(__half);
+    auto half2_block_size = block_size / 4;
 
-        __half* in_d, *out_d;
-        size_t size = elem_num * sizeof(__half);
-        hipMalloc((void**)&in_d, size);
-        hipMalloc((void**)&out_d, size);
+    __half *in_d, *out_d;
+    size_t size = elem_num * sizeof(__half);
+    hipMalloc((void**)&in_d, size);
+    hipMalloc((void**)&out_d, size);
 
-        hipMemcpy(in_d, in.data(), size, hipMemcpyHostToDevice);
+    __half *w_d, *b_d;
+    size_t wb_size = batch_size * sizeof(__half);
+    hipMalloc((void**)&w_d, wb_size);
+    hipMalloc((void**)&b_d, wb_size);
 
-        layernorm_half2<<<block_num, half2_block_size, shared_size>>>(
-            in_d, out_d, batch_size, half2_block_size);
+    float *mean_d, *var_d;
+    size_t mv_size = block_num * sizeof(float);
+    hipMalloc((void**)&mean_d, mv_size);
+    hipMalloc((void**)&var_d, mv_size);
 
-        hipMemcpy((void*)out.data(), out_d, size, hipMemcpyDeviceToHost);
+    hipMemcpy(in_d, in.data(), size, hipMemcpyHostToDevice);
+    hipMemcpy(w_d, w.data(), wb_size, hipMemcpyHostToDevice);
+    hipMemcpy(b_d, bias.data(), wb_size, hipMemcpyHostToDevice);
+
+    layernorm_half2<<<block_num, half2_block_size, shared_size>>>(
+        in_d, w_d, b_d, mean_d, var_d, out_d, batch_size, half2_block_size);
+
+    mean.resize(block_num);
+    hipMemcpy((void*)mean.data(), mean_d, mv_size, hipMemcpyDeviceToHost);
+    var.resize(block_num);
+    hipMemcpy((void*)var.data(), var_d, mv_size, hipMemcpyDeviceToHost);
+    out.resize(elem_num);
+    hipMemcpy((void*)out.data(), out_d, size, hipMemcpyDeviceToHost);
 }
 
-void triadd_layernorm_half_wrapper(const std::vector<__half>& in, 
-                                    std::vector<__half>& out,
-                                    int batch_size) 
+void layernorm_fuse_half_wrapper(const std::vector<__half>& in, 
+                                   const std::vector<__half>& w,
+                                   const std::vector<__half>& bias,
+                                   std::vector<float>& mean,
+                                   std::vector<float>& var,
+                                   std::vector<__half>& out,
+                                   int batch_size) 
 {
-        int elem_num = in.size();
-        out.resize(elem_num);
-        auto block_size       = compute_block_size(batch_size, 1024);
-        int block_num         = elem_num / batch_size;
-        int shared_size       = batch_size * 2 * sizeof(__half);
-        auto half2_block_size = block_size / 2;
+    int elem_num = in.size();
+    auto block_size       = compute_block_size(batch_size, 1024);
+    int block_num         = elem_num / batch_size;
+    int shared_size       = batch_size * 2 * sizeof(__half);
+    auto half_block_size = block_size / 2;
 
-        __half* in_d, *out_d;
-        size_t size = elem_num * sizeof(__half);
-        hipMalloc((void**)&in_d, size);
-        hipMalloc((void**)&out_d, size);
+    __half *in_d, *out_d;
+    size_t size = elem_num * sizeof(__half);
+    hipMalloc((void**)&in_d, size);
+    hipMalloc((void**)&out_d, size);
 
-        hipMemcpy(in_d, in.data(), size, hipMemcpyHostToDevice);
+    __half *w_d, *b_d;
+    size_t wb_size = batch_size * sizeof(__half);
+    hipMalloc((void**)&w_d, wb_size);
+    hipMalloc((void**)&b_d, wb_size);
 
-        layernorm_half<<<block_num, half2_block_size, shared_size>>>(
-            in_d, out_d, batch_size, half2_block_size);
+    float *mean_d, *var_d;
+    size_t mv_size = block_num * sizeof(float);
+    hipMalloc((void**)&mean_d, mv_size);
+    hipMalloc((void**)&var_d, mv_size);
 
-        hipMemcpy((void*)out.data(), out_d, size, hipMemcpyDeviceToHost);
+    hipMemcpy(in_d, in.data(), size, hipMemcpyHostToDevice);
+    hipMemcpy(w_d, w.data(), wb_size, hipMemcpyHostToDevice);
+    hipMemcpy(b_d, bias.data(), wb_size, hipMemcpyHostToDevice);
+
+    layernorm_half<<<block_num, half_block_size, shared_size>>>(
+        in_d, w_d, b_d, mean_d, var_d, out_d, batch_size, half_block_size);
+
+    mean.resize(block_num);
+    hipMemcpy((void*)mean.data(), mean_d, mv_size, hipMemcpyDeviceToHost);
+    var.resize(block_num);
+    hipMemcpy((void*)var.data(), var_d, mv_size, hipMemcpyDeviceToHost);
+    out.resize(elem_num);
+    hipMemcpy((void*)out.data(), out_d, size, hipMemcpyDeviceToHost);
 }

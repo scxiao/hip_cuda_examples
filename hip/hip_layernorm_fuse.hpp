@@ -5,11 +5,19 @@
 #include <hip/hip_runtime.h>
 #include <hip/hip_fp16.h>
 
-void triadd_layernorm_half2_wrapper(const std::vector<__half>& in, 
+void layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
+                                    const std::vector<__half>& w;
+                                    const std::vector<__half>& bias,
+                                    std::vector<float>& mean,
+                                    std::vector<float>& var,
                                     std::vector<__half>& out,
                                     int batch_size);
 
-void triadd_layernorm_half_wrapper(const std::vector<__half>& in, 
+void layernorm_fuse_half_wrapper(const std::vector<__half>& in, 
+                                    const std::vector<__half>& w;
+                                    const std::vector<__half>& bias,
+                                    std::vector<float>& mean,
+                                    std::vector<float>& var,
                                     std::vector<__half>& out,
                                     int batch_size);
 

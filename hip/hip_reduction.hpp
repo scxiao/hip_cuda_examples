@@ -2,7 +2,9 @@
 #define __HIP_REDUCTION_HPP__
 #include <string>
 #include <vector>
+// #include <hip/hip_fp16.h>
 #include <hip/hip_fp16.h>
+#include <hip/hip_runtime.h>
 
 void calc_mem_throughput(const std::string& prefix, int in_size, int out_size, double us_num);
 
