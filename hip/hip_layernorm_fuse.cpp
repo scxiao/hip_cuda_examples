@@ -1,3 +1,4 @@
+#include <iostream>
 #include <vector>
 #include <hip/hip_runtime.h>
 #include <hip/hip_fp16.h>
@@ -84,7 +85,7 @@ __global__ void layernorm_half2(void* in, void* w, void* b, float* m, float *v, 
     batch_item_num /= 2;
     extern __shared__ __half2 buffer2[];
     __half2* in_data_reduce = buffer2;
-    __half2* in_data        = buffer2 + batch_item_num;
+    __half2* in_data        = buffer2 + block_size * 2;
 
     int bid = blockIdx.x;
     int start = bid * batch_item_num;
@@ -130,7 +131,7 @@ __device__ void layernorm_kernel_half(__half* in_data,
 {
     auto m = block_reduce_half(in_data_reduce, batch_item_num, threadIdx.x, block_size);
     m *= rnum;
-    *m_data = m;
+    m_data[blockIdx.x] = m;
 
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
     {
@@ -142,7 +143,7 @@ __device__ void layernorm_kernel_half(__half* in_data,
     m *= rnum;
     m += 1.0e-12f;
     auto rstd = rsqrt(__half2float(m));
-    *v_data = rstd;
+    v_data[blockIdx.x] = rstd;
 
     int start = blockIdx.x * batch_item_num;
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
@@ -164,7 +165,7 @@ __global__ void layernorm_half(void* in, void *w, void *b, float *m, float *v, v
     float rnum     = 1.0f / batch_item_num;
     extern __shared__ __half bufferh[];
     __half* in_data_reduce = bufferh;
-    __half* in_data        = bufferh + batch_item_num;
+    __half* in_data        = bufferh + block_size * 2;
 
     int start = blockIdx.x * batch_item_num;
     for(int i = threadIdx.x; i < batch_item_num; i += block_size)
@@ -174,7 +175,7 @@ __global__ void layernorm_half(void* in, void *w, void *b, float *m, float *v, v
         in_data_reduce[i] = in_data[i];
     }
 
-    layernorm_kernel_half(in_data, in_data_reduce, ww, bb, &m[blockIdx.x], &v[blockIdx.x], output, batch_item_num, block_size, rnum);
+    layernorm_kernel_half(in_data, in_data_reduce, ww, bb, m, v, output, batch_item_num, block_size, rnum);
 }
 
 static size_t compute_block_size(int n, int max_block_size)
@@ -197,7 +198,7 @@ void layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
     out.resize(elem_num);
     auto block_size       = compute_block_size(batch_size, 1024);
     int block_num         = elem_num / batch_size;
-    int shared_size       = batch_size * 2 * sizeof(__half);
+    int shared_size       = block_size * 2 * sizeof(__half);
     auto half2_block_size = block_size / 4;
 
     __half *in_d, *out_d;
@@ -241,7 +242,7 @@ void layernorm_fuse_half_wrapper(const std::vector<__half>& in,
     int elem_num = in.size();
     auto block_size       = compute_block_size(batch_size, 1024);
     int block_num         = elem_num / batch_size;
-    int shared_size       = batch_size * 2 * sizeof(__half);
+    int shared_size       = block_size * 2 * sizeof(__half);
     auto half_block_size = block_size / 2;
 
     __half *in_d, *out_d;
