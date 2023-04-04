@@ -41,7 +41,8 @@ static void layernorm_one_block(int bid, int elem_num,
     std::transform(fin.begin(), fin.end(), vv.begin(), [](auto v) {
         return v * v;
     });
-    var = std::accumulate(vv.begin(), vv.end(), 0.0f) / elem_num;
+    var = std::accumulate(vv.begin(), vv.end(), 0.0f);
+    var /= elem_num;
     var += 1.0e-12;
     var = 1.0f / sqrt(var);
 
@@ -267,21 +268,36 @@ float layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
 
 /////////////////////////// Half data type ////////////////////////////////////
 
-template <class T>
-__device__ T
-block_reduce_half(T* buffer, int tid, int batch_size)
+template<class T>
+__device__ T block_reduce_half1(T* buffer, int batch_size)
 {
     __syncthreads();
     int block_size = blockDim.x;
-    for(int s = block_size; s > 0; s >>= 1)
+    int tid = threadIdx.x;
+    for(int s = block_size/2; s > 0; s /= 2)
     {
-        if(tid < s and tid + s < batch_size)
+        if(tid < s and tid + s < batch_size and tid + s < block_size)
         {
             buffer[tid] += buffer[tid + s];
         }
         __syncthreads();
     }
+
     return buffer[0];
+}
+
+template <class T>
+__device__ T
+block_reduce_half(T* buffer, int batch_size)
+{
+    __syncthreads();
+    int block_size = blockDim.x;
+    T result = 0.0f;
+    for (int i = 0; i < block_size; ++i) {
+        result += buffer[i];
+    }
+    __syncthreads();
+    return result;
 }
 
 // m = x - mean(x)
@@ -298,35 +314,34 @@ __device__ void layernorm_kernel_half(__half* input,
 {
     int block_size = blockDim.x;
     // initialize the data, this is for reduce_sum
-    int start = blockIdx.x * batch_size;
+    const int start = blockIdx.x * batch_size;
     in_data[threadIdx.x] = 0;
     for(int i = threadIdx.x; i < batch_size; i += block_size)
     {
         int idx = i + start;
         in_data[threadIdx.x] += __half2float(input[idx]);
     }
-    __syncthreads();
 
-    auto m = block_reduce_half(in_data, threadIdx.x, batch_size);
+    auto m = block_reduce_half(in_data, batch_size);
     m *= rnum;
+    float mv = m;
     if (threadIdx.x == 0) {
         m_data[blockIdx.x] = m;
     }
-    float mv = m;
 
     in_data[threadIdx.x] = 0;
     for(int i = threadIdx.x; i < batch_size; i += block_size)
     {
         int idx    = i + start;
         float d = __half2float(input[idx]) - mv;
-        in_data[threadIdx.x] += d * d;
+        in_data[threadIdx.x] += (d * d);
     }
-    __syncthreads();
 
-    m = block_reduce_half(in_data, threadIdx.x, batch_size);
-    m *= rnum;
-    m += 1.0e-12f;
-    auto rstd = rsqrt(m);
+    auto vv = block_reduce_half(in_data, batch_size);
+    __syncthreads();
+    vv *= rnum;
+    vv += 1.0e-12f;
+    auto rstd = rsqrt(vv);
     if (threadIdx.x == 0) {
         v_data[blockIdx.x] = rstd;
     }
@@ -339,6 +354,7 @@ __device__ void layernorm_kernel_half(__half* input,
     }
 }
 
+#define BLOCK_SIZE 1024
 // m = x - mean(x)
 // m / sqrt(mean(m ^ 2) + 1e-12)
 __global__ void layernorm_half(void* in, void *w, void *b, float *m, float *v, void* data_out, int batch_size)
@@ -348,8 +364,7 @@ __global__ void layernorm_half(void* in, void *w, void *b, float *m, float *v, v
     __half* bb = reinterpret_cast<__half*>(b);
     __half* output = reinterpret_cast<__half*>(data_out);
     float rnum     = 1.0f / batch_size;
-    // extern __shared__ float bufferh[];
-    float bufferh[1024];
+    extern __shared__ float bufferh[];
     float* in_data        = bufferh;
 
     layernorm_kernel_half(input, in_data, ww, bb, m, v, output, batch_size, rnum);
@@ -364,9 +379,9 @@ void layernorm_fuse_half_wrapper(const std::vector<__half>& in,
                                    int batch_size) 
 {
     int elem_num = in.size();
-    auto block_size       = compute_block_size(batch_size, 1024);
+    auto block_size       = compute_block_size(batch_size, BLOCK_SIZE);
     int block_num         = elem_num / batch_size;
-    int shared_size       = block_size * sizeof(float);
+    size_t shared_size       = block_size * sizeof(float);
 
     __half *in_d, *out_d;
     size_t size = elem_num * sizeof(__half);
@@ -387,10 +402,12 @@ void layernorm_fuse_half_wrapper(const std::vector<__half>& in,
     hipMemcpy(w_d, w.data(), wb_size, hipMemcpyHostToDevice);
     hipMemcpy(b_d, bias.data(), wb_size, hipMemcpyHostToDevice);
 
-    // layernorm_half<<<block_num, block_size, shared_size>>>(
-    //     in_d, w_d, b_d, mean_d, var_d, out_d, batch_size);
-    layernorm_half<<<block_num, block_size>>>(
+    std::cout << "block_num = " << block_num << std::endl;
+    std::cout << "block_size = " << block_size << std::endl;
+    layernorm_half<<<block_num, block_size, shared_size>>>(
         in_d, w_d, b_d, mean_d, var_d, out_d, batch_size);
+    // layernorm_half<<<block_num, block_size>>>(
+    //     in_d, w_d, b_d, mean_d, var_d, out_d, batch_size);
 
     mean.resize(block_num);
     hipMemcpy((void*)mean.data(), mean_d, mv_size, hipMemcpyDeviceToHost);
