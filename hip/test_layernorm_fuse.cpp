@@ -24,7 +24,9 @@ int main(int argc, char** argv) {
     std::vector<float> mean_half, mean_half2;
     std::vector<float> var_half, var_half2;
 
-    layernorm_fuse_half2_wrapper(in, w, bias, mean_half2, var_half2, out_half2, batch_size);
+    float thrpt = layernorm_fuse_half2_wrapper(in, w, bias, mean_half2, var_half2, out_half2, batch_size, 50);
+    std::cout << "Throughput = \t" << thrpt << "\t(GB/s)" << std::endl;
+
     layernorm_fuse_half_wrapper(in, w, bias, mean_half, var_half, out_half, batch_size);
 
     bool ret = true;
