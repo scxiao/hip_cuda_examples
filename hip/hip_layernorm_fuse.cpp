@@ -4,6 +4,7 @@
 #include <hip/hip_runtime.h>
 #include <hip/hip_fp16.h>
 #include "timer.hpp"
+#include "hip_layernorm_fuse.hpp"
 
 static size_t compute_block_size(int n, int max_block_size)
 {
