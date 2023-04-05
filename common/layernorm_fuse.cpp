@@ -2,6 +2,7 @@
 #include <numeric>
 #include <algorithm>
 #include <cmath>
+#include <thread>
 
 #include "layernorm_fuse.hpp"
 
@@ -46,13 +47,20 @@ void layernorm_fuse_baseline(const std::vector<__half>& in,
     mean.resize(block_num);
     var.resize(block_num);
     out.resize(in.size());
-    for (int bid = 0; bid < block_num; ++bid) {
-        layernorm_one_block(bid, batch_size,
-                           in,
-                           w,
-                           bias,
-                           mean[bid],
-                           var[bid],
-                           out);
+
+    size_t thread_num = std::thread::hardware_concurrency() / 2;
+    std::vector<std::thread> vec_tids;
+
+    for (size_t i = 0; i < thread_num; ++i) {
+        vec_tids.push_back(std::thread([&, i] {
+            for (int bid = i; bid < block_num; bid += thread_num) {
+                layernorm_one_block(bid, batch_size, in, w, bias, 
+                    mean[bid], var[bid], out);
+            }
+        }));
+    }
+
+    for (auto& t : vec_tids) {
+        t.join();
     }
 }
