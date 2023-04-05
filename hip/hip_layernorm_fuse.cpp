@@ -143,12 +143,14 @@ struct half2_sum
 // in_data is in shared memory
 template <class Op>
 __device__ __half2 block_reduce_half2(
-    __half2* buffer, int batch_item_num, int tid, int block_size, Op op)
+    __half2* buffer, int batch_size, Op op)
 {
     __syncthreads();
+    int tid = threadIdx.x;
+    int block_size = blockDim.x;
     for(int s = block_size; s > 0; s >>= 1)
     {
-        if(tid < s and tid + s < batch_item_num and tid + s < block_size)
+        if(tid < s and tid + s < batch_size and tid + s < block_size)
         {
             buffer[tid] = op(buffer[tid], buffer[tid + s]);
         }
@@ -171,13 +173,13 @@ __device__ void layernorm_kernel_half2(__half2* input,
                                        float*   v_data,
                                        __half2* out,
                                        int batch_size,
-                                       int block_size,
                                        float rbatch_num)
 {
     auto rnum = __float2half2_rn(rbatch_num);
     const int bid = blockIdx.x;
     const int start = bid * batch_size;
     const int tid = threadIdx.x;
+    const int block_size = blockDim.x;
     in_data[tid] = 0;
     for(int i = tid; i < batch_size; i += block_size)
     {
@@ -186,7 +188,7 @@ __device__ void layernorm_kernel_half2(__half2* input,
     }
 
     auto m =
-        block_reduce_half2(in_data, batch_size, tid, block_size, half2_sum{});
+        block_reduce_half2(in_data, batch_size,half2_sum{});
     m = __hmul2(m, rnum);
     if (tid == 0) {
         m_data[bid] = __low2float(m);
@@ -202,7 +204,7 @@ __device__ void layernorm_kernel_half2(__half2* input,
         in_data[tid] = __hadd2(in_data[tid], __hmul2(diff, diff));
     }
 
-    m = block_reduce_half2(in_data, batch_size, tid, block_size, half2_sum{});
+    m = block_reduce_half2(in_data, batch_size, half2_sum{});
     m = __hmul2(m, rnum);
 
     auto eps = __float2half2_rn(1.0e-12f);
@@ -232,7 +234,7 @@ __global__ void layernorm_half2(void* in, void* w, void* b, float* m, float *v, 
     extern __shared__ __half2 buffer2[];
     __half2* in_data        = buffer2;
 
-    layernorm_kernel_half2(input, in_data, ww, bb, m, v, output, batch_size, block_size, rnum);
+    layernorm_kernel_half2(input, in_data, ww, bb, m, v, output, batch_size, rnum);
 }
 
 void calc_layernorm_fuse_half2(void* in_d,
