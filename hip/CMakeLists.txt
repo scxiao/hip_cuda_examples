@@ -21,7 +21,10 @@ file(GLOB util_SRC "*.cpp")
 file(GLOB test_examples test_*.cpp)
 file(GLOB util_HDR "*.hpp")
 list(REMOVE_ITEM util_SRC ${test_examples})
-set(lib_SRC ${util_SRC} ../common/timer.cpp)
+set(lib_SRC 
+    ${util_SRC} 
+    ../common/timer.cpp
+    ../common/layernorm_fuse.cpp)
 
 message("lib_src = " ${lib_SRC})
 

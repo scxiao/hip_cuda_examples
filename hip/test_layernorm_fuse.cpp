@@ -4,6 +4,7 @@
 #include <utilities.hpp>
 
 #include "hip_layernorm_fuse.hpp"
+#include "layernorm_fuse.hpp"
 
 int main(int argc, char** argv) {
     if (argc != 3) {
@@ -25,7 +26,7 @@ int main(int argc, char** argv) {
     std::vector<float> mean_half, mean_half2, meanb;
     std::vector<float> var_half, var_half2, varb;
 
-    layernorm_baseline(in, w, bias, meanb, varb, outb, batch_size);
+    layernorm_fuse_baseline(in, w, bias, meanb, varb, outb, batch_size);
 
     float thrpt = layernorm_fuse_half2_wrapper(in, w, bias, mean_half2, var_half2, out_half2, batch_size, 50);
     std::cout << "Throughput = \t" << thrpt << "\t(GB/s)" << std::endl;
