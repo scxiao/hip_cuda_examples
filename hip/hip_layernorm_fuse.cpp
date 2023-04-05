@@ -270,7 +270,7 @@ float layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
 /////////////////////////// Half data type ////////////////////////////////////
 
 template<class T>
-__device__ T block_reduce_half1(T* buffer, int batch_size)
+__device__ T block_reduce_half(T* buffer, int batch_size)
 {
     __syncthreads();
     int block_size = blockDim.x;
@@ -285,20 +285,6 @@ __device__ T block_reduce_half1(T* buffer, int batch_size)
     }
 
     return buffer[0];
-}
-
-template <class T>
-__device__ T
-block_reduce_half(T* buffer, int batch_size)
-{
-    __syncthreads();
-    int block_size = blockDim.x;
-    T result = 0.0f;
-    for (int i = 0; i < block_size; ++i) {
-        result += buffer[i];
-    }
-    __syncthreads();
-    return result;
 }
 
 // m = x - mean(x)
@@ -330,6 +316,7 @@ __device__ void layernorm_kernel_half(__half* input,
         m_data[blockIdx.x] = m;
     }
 
+    __syncthreads();
     in_data[threadIdx.x] = 0;
     for(int i = threadIdx.x; i < batch_size; i += block_size)
     {
@@ -339,7 +326,6 @@ __device__ void layernorm_kernel_half(__half* input,
     }
 
     auto vv = block_reduce_half(in_data, batch_size);
-    __syncthreads();
     vv *= rnum;
     vv += 1.0e-12f;
     auto rstd = rsqrt(vv);
