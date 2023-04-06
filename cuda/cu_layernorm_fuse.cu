@@ -2,6 +2,8 @@
 #include <vector>
 #include <numeric>
 #include <algorithm>
+#include <functional>
+
 #include <cuda.h>
 #include <cmath>
 #include "timer.hpp"
@@ -38,8 +40,7 @@ __device__ T block_reduce_half(T* buffer, int batch_size)
     for(int s = block_size/2; s > 0; s /= 2)
     {
         if(tid < s and tid + s < batch_size and tid + s < block_size)
-        {   
-            float v = buffer[tid];
+        {
             buffer[tid] += buffer[tid + s];
         }
         __syncthreads();
@@ -113,61 +114,27 @@ __global__ void layernorm_half(void* in, void *w, void *b, float *m, float *v, v
     __half* output = reinterpret_cast<__half*>(data_out);
     float rnum     = 1.0f / batch_size;
     extern __shared__ float bufferh[];
+    float* in_data        = bufferh;
 
-    layernorm_kernel_half(input, bufferh, ww, bb, m, v, output, batch_size, rnum);
+    layernorm_kernel_half(input, in_data, ww, bb, m, v, output, batch_size, rnum);
 }
 
-void layernorm_fuse_half_wrapper(const std::vector<__half>& in, 
-                                   const std::vector<__half>& w,
-                                   const std::vector<__half>& bias,
-                                   std::vector<float>& mean,
-                                   std::vector<float>& var,
-                                   std::vector<__half>& out,
-                                   int batch_size) 
+void calc_layernorm_fuse_half(void* in_d,
+                               void* w_d,
+                               void* bias_d,
+                               float* mean_d,
+                               float* var_d,
+                               void* out_d,
+                               int block_num,
+                               int batch_size,
+                               int block_size,
+                               int shared_size)
 {
-    int elem_num = in.size();
-    auto block_size       = compute_block_size(batch_size, BLOCK_SIZE);
-    int block_num         = elem_num / batch_size;
-    size_t shared_size       = block_size * sizeof(float);
-
-    __half *in_d, *out_d;
-    size_t size = elem_num * sizeof(__half);
-    cudaMalloc((void**)&in_d, size);
-    cudaMalloc((void**)&out_d, size);
-
-    __half *w_d, *b_d;
-    size_t wb_size = batch_size * sizeof(__half);
-    cudaMalloc((void**)&w_d, wb_size);
-    cudaMalloc((void**)&b_d, wb_size);
-
-    float *mean_d, *var_d;
-    size_t mv_size = block_num * sizeof(float);
-    cudaMalloc((void**)&mean_d, mv_size);
-    cudaMalloc((void**)&var_d, mv_size);
-
-    cudaMemcpy(in_d, in.data(), size, cudaMemcpyHostToDevice);
-    cudaMemcpy(w_d, w.data(), wb_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(b_d, bias.data(), wb_size, cudaMemcpyHostToDevice);
-
     layernorm_half<<<block_num, block_size, shared_size>>>(
-        in_d, w_d, b_d, mean_d, var_d, out_d, batch_size);
-
-    mean.resize(block_num);
-    cudaMemcpy((void*)mean.data(), mean_d, mv_size, cudaMemcpyDeviceToHost);
-    var.resize(block_num);
-    cudaMemcpy((void*)var.data(), var_d, mv_size, cudaMemcpyDeviceToHost);
-    out.resize(elem_num);
-    cudaMemcpy((void*)out.data(), out_d, size, cudaMemcpyDeviceToHost);
-
-    cudaFree(in_d);
-    cudaFree(out_d);
-    cudaFree(w_d);
-    cudaFree(b_d);
-    cudaFree(mean_d);
-    cudaFree(var_d);
+        in_d, w_d, bias_d, mean_d, var_d, out_d, batch_size);
 }
 
-/////////////////////   Half2 data type   /////////////////////////////////////
+//////////////////////////////////  half2 data type /////////////////////////////
 
 struct half2_sum
 {
@@ -177,12 +144,14 @@ struct half2_sum
 // in_data is in shared memory
 template <class Op>
 __device__ __half2 block_reduce_half2(
-    __half2* buffer, int batch_item_num, int tid, int block_size, Op op)
+    __half2* buffer, int batch_size, Op op)
 {
     __syncthreads();
+    int tid = threadIdx.x;
+    int block_size = blockDim.x;
     for(int s = block_size; s > 0; s >>= 1)
     {
-        if(tid < s and tid + s < batch_item_num)
+        if(tid < s and tid + s < batch_size and tid + s < block_size)
         {
             buffer[tid] = op(buffer[tid], buffer[tid + s]);
         }
@@ -204,47 +173,49 @@ __device__ void layernorm_kernel_half2(__half2* input,
                                        float*   m_data,
                                        float*   v_data,
                                        __half2* out,
-                                       int batch_item_num,
-                                       int block_size,
+                                       int batch_size,
                                        float rbatch_num)
 {
     auto rnum = __float2half2_rn(rbatch_num);
-    int bid = blockIdx.x;
-    int start = bid * batch_item_num;
-    in_data[threadIdx.x] = __float2half2_rn(0.0f);
-    for(int i = threadIdx.x; i < batch_item_num; i += block_size)
+    const int bid = blockIdx.x;
+    const int start = bid * batch_size;
+    const int tid = threadIdx.x;
+    const int block_size = blockDim.x;
+    in_data[tid] = __float2half2_rn(0.0f);
+    for(int i = tid; i < batch_size; i += block_size)
     {
         int idx           = i + start;
-        in_data[threadIdx.x] = __hadd2(in_data[threadIdx.x], input[idx]);
+        in_data[tid] = __hadd2(in_data[tid], input[idx]);
     }
 
     auto m =
-        block_reduce_half2(in_data, batch_item_num, threadIdx.x, block_size, half2_sum{});
+        block_reduce_half2(in_data, batch_size,half2_sum{});
     m = __hmul2(m, rnum);
-    if (threadIdx.x == 0) {
-        m_data[blockIdx.x] = __low2float(m);
+    if (tid == 0) {
+        m_data[bid] = __low2float(m);
     }
     __half2 mv = m;
 
-    in_data[threadIdx.x] = __float2half2_rn(0.0f);
-    for(int i = threadIdx.x; i < batch_item_num; i += block_size)
+    __syncthreads();
+    in_data[tid] = __float2half2_rn(0.0f);
+    for(int i = tid; i < batch_size; i += block_size)
     {
         int idx           = i + start;
         __half2 diff = __hsub2(input[idx], mv);
-        in_data[threadIdx.x] = __hadd2(in_data[threadIdx.x], __hmul2(diff, diff));
+        in_data[tid] = __hadd2(in_data[tid], __hmul2(diff, diff));
     }
 
-    m = block_reduce_half2(in_data, batch_item_num, threadIdx.x, block_size, half2_sum{});
+    m = block_reduce_half2(in_data, batch_size, half2_sum{});
     m = __hmul2(m, rnum);
 
     auto eps = __float2half2_rn(1.0e-12f);
     auto r   = __hadd2(m, eps);
     r        = h2rsqrt(r);
-    if (threadIdx.x == 0) {
+    if (tid == 0) {
         v_data[blockIdx.x] = __low2float(r);
     }
 
-    for(int i = threadIdx.x; i < batch_item_num; i += block_size)
+    for(int i = tid; i < batch_size; i += block_size)
     {
         int idx  = i + start;
         auto o2 = __hmul2(__hsub2(input[idx], mv), r);
@@ -252,19 +223,19 @@ __device__ void layernorm_kernel_half2(__half2* input,
     }
 }
 
-__global__ void layernorm_half2(void* in, void* w, void* b, float* m, float *v, void* data_out, int batch_item_num, int block_size)
+__global__ void layernorm_half2(void* in, void* w, void* b, float* m, float *v, void* data_out, int batch_size, int block_size)
 {
     __half2* input = reinterpret_cast<__half2*>(in);
     __half2* ww = reinterpret_cast<__half2*>(w);
     __half2* bb = reinterpret_cast<__half2*>(b);
 
     __half2* output = reinterpret_cast<__half2*>(data_out);
-    float rnum      = 1.0f / batch_item_num;
-    batch_item_num /= 2;
+    float rnum      = 1.0f / batch_size;
+    batch_size /= 2;
     extern __shared__ __half2 buffer2[];
     __half2* in_data        = buffer2;
 
-    layernorm_kernel_half2(input, in_data, ww, bb, m, v, output, batch_item_num, block_size, rnum);
+    layernorm_kernel_half2(input, in_data, ww, bb, m, v, output, batch_size, rnum);
 }
 
 void calc_layernorm_fuse_half2(void* in_d,
@@ -278,26 +249,39 @@ void calc_layernorm_fuse_half2(void* in_d,
                                int block_size,
                                int shared_size)
 {
+    // block_size /= 2;
     layernorm_half2<<<block_num, block_size, shared_size>>>(
         in_d, w_d, bias_d, mean_d, var_d, out_d, batch_size, block_size);
 
 }
 
-float layernorm_fuse_half2_wrapper(const std::vector<__half>& in, 
-                                    const std::vector<__half>& w,
-                                    const std::vector<__half>& bias,
-                                    std::vector<float>& mean,
-                                    std::vector<float>& var,
-                                    std::vector<__half>& out,
-                                    int batch_size,
-                                    int repeat_num = 50)
+// Wrapper functions
+using func = std::function<void(void* in_d,
+                               void* w_d,
+                               void* bias_d,
+                               float* mean_d,
+                               float* var_d,
+                               void* out_d,
+                               int block_num,
+                               int batch_size,
+                               int block_size,
+                               int shared_size)>;
+
+float layernorm_fuse_wrapper(func fn,
+                             const std::vector<__half>& in,
+                             const std::vector<__half>& w,
+                             const std::vector<__half>& bias,
+                             std::vector<float>& mean,
+                             std::vector<float>& var,
+                             std::vector<__half>& out,
+                             int batch_size,
+                             int repeat_num = 50)
 {
     int elem_num = in.size();
     out.resize(elem_num);
     int block_num         = elem_num / batch_size;
     auto block_size       = compute_block_size(batch_size, 1024);
-    block_size /= 2;
-    int shared_size       = block_size * 2 * sizeof(__half);
+    int shared_size       = block_size * 2 * sizeof(float);
     mean.resize(block_num);
     var.resize(block_num);
 
@@ -324,18 +308,18 @@ float layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
 
     // warm up for 10 times of calculation
     for (int i = 0; i < 10; ++i) {
-        calc_layernorm_fuse_half2(in_d, w_d, b_d, mean_d, var_d, out_d,
-                                  block_num, batch_size, block_size, shared_size);
+        fn(in_d, w_d, b_d, mean_d, var_d, out_d,
+           block_num, batch_size, block_size, shared_size);
     }
     checkCuda(cudaDeviceSynchronize());
 
     HRTimer timer;
     timer.start();
     for (int i = 0; i < repeat_num; ++i) {    
-        calc_layernorm_fuse_half2(in_d, w_d, b_d, mean_d, var_d, out_d,
-                                  block_num, batch_size, block_size, shared_size);
-        checkCuda(cudaDeviceSynchronize());
+        fn(in_d, w_d, b_d, mean_d, var_d, out_d,
+           block_num, batch_size, block_size, shared_size);
     }
+    checkCuda(cudaDeviceSynchronize());
     timer.stop();
 
     size_t us = timer.gettime_us();
@@ -357,5 +341,28 @@ float layernorm_fuse_half2_wrapper(const std::vector<__half>& in,
     return throughput;
 }
 
+float layernorm_fuse_half2_wrapper(const std::vector<__half>& in, 
+                                    const std::vector<__half>& w,
+                                    const std::vector<__half>& bias,
+                                    std::vector<float>& mean,
+                                    std::vector<float>& var,
+                                    std::vector<__half>& out,
+                                    int batch_size,
+                                    int repeat_num = 50)
+{
+    return layernorm_fuse_wrapper(calc_layernorm_fuse_half2,
+                in, w, bias, mean, var, out, batch_size, repeat_num);
+}
 
-
+float layernorm_fuse_half_wrapper(const std::vector<__half>& in, 
+                                    const std::vector<__half>& w,
+                                    const std::vector<__half>& bias,
+                                    std::vector<float>& mean,
+                                    std::vector<float>& var,
+                                    std::vector<__half>& out,
+                                    int batch_size,
+                                    int repeat_num = 50)
+{
+    return layernorm_fuse_wrapper(calc_layernorm_fuse_half,
+                in, w, bias, mean, var, out, batch_size, repeat_num);
+}

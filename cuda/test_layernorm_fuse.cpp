@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <numeric>
 #include <init_vec.hpp>
 #include <utilities.hpp>
@@ -28,12 +29,20 @@ int main(int argc, char** argv) {
 
     layernorm_fuse_baseline(in, w, bias, meanb, varb, outb, batch_size);
 
-    // float thrpt = layernorm_fuse_half2_wrapper(in, w, bias, mean_half2, var_half2, out_half2, batch_size, 50);
-    // std::cout << "Throughput = \t" << thrpt << "\t(GB/s)" << std::endl;
+    float thrpt2 = layernorm_fuse_half2_wrapper(in, w, bias, mean_half2, var_half2, out_half2, batch_size, 50);
+    std::cout << "Half2 throughput = \t" << thrpt2 << "\t(GB/s)" << std::endl;
 
-    layernorm_fuse_half_wrapper(in, w, bias, mean_half, var_half, out_half, batch_size);
-    // if (not compare(meanb, mean_half2)) {
-    if (not compare(meanb, mean_half)) {
+#define PRINT_TO_FILE
+#ifdef PRINT_TO_FILE
+    std::ofstream ofs("../thrpt_half2.txt", std::ofstream::app);
+    ofs << batch_size << ", " << thrpt2 << std::endl;
+    ofs.close();
+#endif
+
+    float thrpt = layernorm_fuse_half_wrapper(in, w, bias, mean_half, var_half, out_half, batch_size, 50);
+    std::cout << "Half throughput = \t" << thrpt << "\t(GB/s)" << std::endl;
+
+    if (not (compare(meanb, mean_half) and compare(meanb, mean_half2))) {
         std::cout << "MEAN output failed!" << std::endl;
         return 1;
     }
@@ -41,8 +50,7 @@ int main(int argc, char** argv) {
         std::cout << "MEAN output correct!" << std::endl;
     }
 
-    // if (not compare(varb, var_half2, 0.01f)) {
-    if (not compare(varb, var_half, 0.01f)) {
+    if (not (compare(varb, var_half, 0.01f) and compare(varb, var_half2, 0.01f))) {
         std::cout << "VAR output failed!" << std::endl;
         return 1;
     }
@@ -50,8 +58,7 @@ int main(int argc, char** argv) {
         std::cout << "VAR output correct!" << std::endl;
     }
 
-    // if (not compare(outb, out_half2, 0.01f)) {
-    if (not compare(outb, out_half, 0.01f)) {
+    if (not (compare(outb, out_half, 0.01f) and compare(outb, out_half2, 0.01f))) {
         std::cout << "OUTPUT failed!" << std::endl;
     }
     else {
@@ -62,4 +69,3 @@ int main(int argc, char** argv) {
 
     return 0;
 }
-
