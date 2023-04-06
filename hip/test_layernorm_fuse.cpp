@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <numeric>
 #include <init_vec.hpp>
 #include <utilities.hpp>
@@ -30,6 +31,13 @@ int main(int argc, char** argv) {
 
     float thrpt2 = layernorm_fuse_half2_wrapper(in, w, bias, mean_half2, var_half2, out_half2, batch_size, 50);
     std::cout << "Half2 throughput = \t" << thrpt2 << "\t(GB/s)" << std::endl;
+
+#define PRINT_TO_FILE
+#ifdef PRINT_TO_FILE
+    std::ofstream ofs("../thrpt_half2.txt", std::ofstream::app);
+    ofs << batch_size << ", " << thrpt2 << std::endl;
+    ofs.close();
+#endif
 
     float thrpt = layernorm_fuse_half_wrapper(in, w, bias, mean_half, var_half, out_half, batch_size, 50);
     std::cout << "Half throughput = \t" << thrpt << "\t(GB/s)" << std::endl;
