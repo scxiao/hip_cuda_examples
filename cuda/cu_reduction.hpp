@@ -11,12 +11,14 @@ bool reduction1(const std::vector<float>& in, std::vector<float>& out);
 bool reduction2(const std::vector<float>& in, std::vector<float>& out);
 bool reduction3(const std::vector<float>& in, std::vector<float>& out);
 bool reduction4(const std::vector<float>& in, std::vector<float>& out);
+bool reduction5(const std::vector<float>& in, std::vector<float>& out);
 
 bool reduction0(const std::vector<__half>& in, std::vector<__half>& out);
 bool reduction1(const std::vector<__half>& in, std::vector<__half>& out);
 bool reduction2(const std::vector<__half>& in, std::vector<__half>& out);
 bool reduction3(const std::vector<__half>& in, std::vector<__half>& out);
 bool reduction4(const std::vector<__half>& in, std::vector<__half>& out);
+bool reduction5(const std::vector<__half>& in, std::vector<__half>& out);
 
 
 #endif

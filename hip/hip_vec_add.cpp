@@ -90,7 +90,7 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
     hipMemcpy(cu_in2, in2.data(), mem_size, hipMemcpyHostToDevice);
     //hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
 
-    std::size_t block_size = 512;
+    std::size_t block_size = 1024;
     HRTimer timer;
     timer.start();
     vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
