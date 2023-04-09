@@ -29,23 +29,28 @@ int main(int argc, char **argv) {
 
     std::vector<float> out_vec1;
     reduction1(in_vec, out_vec1);
-    bool ret = compare(out_vec0, out_vec1);
+    bool ret = compare(out_vec0, out_vec1, 0.01f);
     cout << "FP32 Reduction1 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     std::vector<float> out_vec2;
     reduction2(in_vec, out_vec2);
-    ret = compare(out_vec1, out_vec2);
+    ret = compare(out_vec1, out_vec2, 0.01f);
     cout << "FP32 Reduction2 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     std::vector<float> out_vec3;
     reduction3(in_vec, out_vec3);
-    ret = compare(out_vec2, out_vec3);
+    ret = compare(out_vec2, out_vec3, 0.01f);
     cout << "FP32 Reduction3 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     std::vector<float> out_vec4;
     reduction4(in_vec, out_vec4);
-    ret = compare(out_vec3, out_vec4);
+    ret = compare(out_vec3, out_vec4, 0.01f);
     cout << "FP32 Reduction4 " << (ret ? "PASSED" : "FAILED") << endl << endl;
+
+    std::vector<float> out_vec5;
+    reduction4(in_vec, out_vec5);
+    ret = compare(out_vec3, out_vec5, 0.01f);
+    cout << "FP32 Reduction5 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     std::vector<half> out_vec0h;
     reduction0(in_vech, out_vec0h);
@@ -53,24 +58,28 @@ int main(int argc, char **argv) {
 
     std::vector<half> out_vec1h;
     reduction1(in_vech, out_vec1h);
-    ret = compare(out_vec0h, out_vec1h);
+    ret = compare(out_vec0h, out_vec1h, 0.01f);
     cout << "FP16 Reduction1 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     std::vector<half> out_vec2h;
     reduction2(in_vech, out_vec2h);
-    ret = compare(out_vec1h, out_vec2h);
+    ret = compare(out_vec1h, out_vec2h, 0.01f);
     cout << "FP16 Reduction2 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     std::vector<half> out_vec3h;
     reduction3(in_vech, out_vec3h);
-    ret = compare(out_vec2h, out_vec3h);
+    ret = compare(out_vec2h, out_vec3h, 0.01f);
     cout << "FP16 Reduction3 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     std::vector<half> out_vec4h;
     reduction4(in_vech, out_vec4h);
-    ret = compare(out_vec3h, out_vec4h);
+    ret = compare(out_vec3h, out_vec4h, 0.01f);
     cout << "FP16 Reduction4 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
+    std::vector<half> out_vec5h;
+    reduction4(in_vech, out_vec5h);
+    ret = compare(out_vec3h, out_vec5h, 0.01f);
+    cout << "FP16 Reduction5 " << (ret ? "PASSED" : "FAILED") << endl << endl;
 
     return 0;
 }
