@@ -94,7 +94,7 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
     float *cache_d;
     hipMalloc((void**)&cache_d, cache_size);
 
-    std::size_t block_size = 512;
+    std::size_t block_size = 1024;
     // warm up to run the kernel for 10 times
     for (int i = 0; i < 10; ++i) {
         hipMemset(cache_d, 0, cache_size);

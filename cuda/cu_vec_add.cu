@@ -108,12 +108,27 @@ bool cu_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vect
 
     cudaMemcpy(cu_in1, in1.data(), mem_size, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_in2, in2.data(), mem_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(res.data(), in2.data(), mem_size, cudaMemcpyDeviceToHost);
 
-    std::size_t block_size = 256;
+    float *cache;
+    std::size_t cache_size = (1 << 28);
+    cudaMalloc((void**)&cache, cache_size);
+
+    // warm up for 10 times
+    std::size_t block_size = 1024;
+    for (int i = 0; i < 10; ++i)
+    {
+        cudaMemset(cache, 0, cache_size);
+        vec_add<<<((n/2 - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
+    checkCuda(cudaDeviceSynchronize());
+
+    int repeat_num = 50;
     HRTimer timer;
     timer.start();
-    vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    for (int i = 0; i < repeat_num; ++i) {
+        cudaMemset(cache, 0, cache_size);
+        vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
     checkCuda(cudaDeviceSynchronize());
     timer.stop();
 
@@ -121,7 +136,9 @@ bool cu_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vect
     cudaFree(cu_in1); cudaFree(cu_in2); cudaFree(cu_res);
 
     std::size_t usec = timer.gettime_us();
-    float throughput = 3.0f * mem_size / usec / 1.0e3;
+    mem_size *= 3;
+    mem_size += cache_size;
+    float throughput = 1.0f * mem_size * repeat_num / usec / 1.0e3;
     std::cout << typeid(T).name() << " vec_add, time = " << usec << "us, throughput = " << throughput << "GB/s" << std::endl;
 
     return true;
@@ -146,12 +163,27 @@ bool cu_vec_add1(const std::vector<__half>& in1, const std::vector<__half>& in2,
 
     cudaMemcpy(cu_in1, in1.data(), mem_size, cudaMemcpyHostToDevice);
     cudaMemcpy(cu_in2, in2.data(), mem_size, cudaMemcpyHostToDevice);
-    cudaMemcpy(res.data(), in2.data(), mem_size, cudaMemcpyDeviceToHost);
 
-    std::size_t block_size = 256;
+    float *cache;
+    std::size_t cache_size = (1 << 28);
+    cudaMalloc((void**)&cache, cache_size);
+
+    // warm up for 10 times
+    std::size_t block_size = 1024;
+    for (int i = 0; i < 10; ++i)
+    {
+        cudaMemset(cache, 0, cache_size);
+        vec_add<<<((n/2 - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
+    checkCuda(cudaDeviceSynchronize());
+
+    int repeat_num = 50;
     HRTimer timer;
     timer.start();
-    vec_add<<<((n/2 - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    for (int i = 0; i < repeat_num; ++i) {
+        cudaMemset(cache, 0, cache_size);
+        vec_add<<<((n/2 - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
     checkCuda(cudaDeviceSynchronize());
     timer.stop();
 
@@ -159,7 +191,9 @@ bool cu_vec_add1(const std::vector<__half>& in1, const std::vector<__half>& in2,
     cudaFree(cu_in1); cudaFree(cu_in2); cudaFree(cu_res);
 
     std::size_t usec = timer.gettime_us();
-    float throughput = 3.0f * mem_size / usec / 1.0e3;
+    mem_size *= 3;
+    mem_size += cache_size;
+    float throughput = 1.0f * mem_size * repeat_num / usec / 1.0e3;
     std::cout << typeid(T).name() << " vec_addH, time = " << usec << "us, throughput = " << throughput << "GB/s" << std::endl;
 
     return true;
