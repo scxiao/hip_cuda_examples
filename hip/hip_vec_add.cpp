@@ -90,10 +90,25 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
     hipMemcpy(cu_in2, in2.data(), mem_size, hipMemcpyHostToDevice);
     //hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
 
+    std::size_t cache_size = (1 << 28);
+    float *cache_d;
+    hipMalloc((void**)&cache_d, cache_size);
+
     std::size_t block_size = 512;
+    // warm up to run the kernel for 10 times
+    for (int i = 0; i < 10; ++i) {
+        hipMemset(cache_d, 0, cache_size);
+        vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
+    checkHip(hipDeviceSynchronize());
+
     HRTimer timer;
+    int repeat_num = 50;
     timer.start();
-    vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    for (int i = 0; i < repeat_num; ++i) {
+        hipMemset(cache_d, 0, cache_size);
+        vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
     checkHip(hipDeviceSynchronize());
     timer.stop();
 
@@ -101,7 +116,9 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
     hipFree(cu_in1); hipFree(cu_in2); hipFree(cu_res);
 
     std::size_t usec = timer.gettime_us();
-    float throughput = 3.0f * mem_size / usec / 1.0e3;
+    mem_size *= 3;
+    mem_size += cache_size;
+    float throughput = mem_size * repeat_num / usec / 1.0e3;
     std::cout << typeid(T).name() << " vec_add, time = " << usec << "us, throughput = " << throughput << "GB/s" << std::endl;
 
     return true;
@@ -124,22 +141,39 @@ bool hip_vec_addh2(const std::vector<__half>& in1, const std::vector<__half>& in
     hipMalloc((void **)&cu_in2, mem_size);
     hipMalloc((void **)&cu_res, mem_size);
 
+    std::size_t cache_size = (1 << 28);
+    float *cache_d;
+    hipMalloc((void**)&cache_d, cache_size);
+
     hipMemcpy(cu_in1, in1.data(), mem_size, hipMemcpyHostToDevice);
     hipMemcpy(cu_in2, in2.data(), mem_size, hipMemcpyHostToDevice);
     //hipMemcpy(res.data(), in2.data(), mem_size, hipMemcpyDeviceToHost);
 
+    // warm up
     std::size_t block_size = 1024;
+    for (int i = 0; i < 10; ++i) {
+        vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
+    checkHip(hipDeviceSynchronize());
+
     HRTimer timer;
     timer.start();
-    vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    // repeat 100 times
+    int repeat_num = 50;
+    for (int i = 0; i < repeat_num; ++i) {
+        // invalidate cache
+        hipMemset(cache_d, 0, cache_size);
+        vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+    }
     checkHip(hipDeviceSynchronize());
     timer.stop();
-
     hipMemcpy(res.data(), cu_res, mem_size, hipMemcpyDeviceToHost);
     hipFree(cu_in1); hipFree(cu_in2); hipFree(cu_res);
 
+    mem_size *= 3;
+    mem_size += cache_size;
     std::size_t usec = timer.gettime_us();
-    float throughput = 3.0f * mem_size / usec / 1.0e3;
+    float throughput = mem_size * repeat_num / usec / 1000.0f ;
     std::cout << "half2, vec_add time = " << usec << "us, throughput = " << throughput << "GB/s" << std::endl;
 
     return true;
