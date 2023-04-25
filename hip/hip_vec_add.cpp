@@ -98,7 +98,9 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
     // warm up to run the kernel for 10 times
     for (int i = 0; i < 10; ++i) {
         hipMemset(cache_d, 0, cache_size);
-        vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+        hipLaunchKernelGGL(vec_add, dim3(((n - 1) / block_size + 1)),
+                            dim3(block_size), 0, 0,
+                            cu_in1, cu_in2, cu_res, n);
     }
     checkHip(hipDeviceSynchronize());
 
@@ -107,7 +109,10 @@ bool hip_vec_addT(const std::vector<T>& in1, const std::vector<T>& in2, std::vec
     timer.start();
     for (int i = 0; i < repeat_num; ++i) {
         hipMemset(cache_d, 0, cache_size);
-        vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+        // vec_add<<<((n - 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+        hipLaunchKernelGGL(vec_add, dim3(((n - 1) / block_size + 1)),
+                            dim3(block_size), 0, 0,
+                            cu_in1, cu_in2, cu_res, n);
     }
     checkHip(hipDeviceSynchronize());
     timer.stop();
@@ -152,7 +157,11 @@ bool hip_vec_addh2(const std::vector<__half>& in1, const std::vector<__half>& in
     // warm up
     std::size_t block_size = 1024;
     for (int i = 0; i < 10; ++i) {
-        vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+        // vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+        hipLaunchKernelGGL(vec_addh2, dim3(((n/2 - 1) / block_size + 1)),
+                            dim3(block_size), 0, 0,
+                            cu_in1, cu_in2, cu_res, n/2);
+
     }
     checkHip(hipDeviceSynchronize());
 
@@ -163,7 +172,10 @@ bool hip_vec_addh2(const std::vector<__half>& in1, const std::vector<__half>& in
     for (int i = 0; i < repeat_num; ++i) {
         // invalidate cache
         hipMemset(cache_d, 0, cache_size);
-        vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+        // vec_addh2<<<((n/2- 1) / block_size + 1), block_size>>>(cu_in1, cu_in2, cu_res, n);
+        hipLaunchKernelGGL(vec_addh2, dim3(((n/2 - 1) / block_size + 1)),
+                            dim3(block_size), 0, 0,
+                            cu_in1, cu_in2, cu_res, n/2);
     }
     checkHip(hipDeviceSynchronize());
     timer.stop();
