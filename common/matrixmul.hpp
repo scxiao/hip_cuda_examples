@@ -249,7 +249,7 @@ void CMatrix<T>::init_() {
         for (size_t j = 0; j < m_column; ++j) {
             size_t loc = i * m_column + j;
             int r = rand() % 10;
-            m_buffer[loc] = static_cast<T>(r);
+            m_buffer[loc] = static_cast<T>(r / 10.0f);
         }
     }
 
