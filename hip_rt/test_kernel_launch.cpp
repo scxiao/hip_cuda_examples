@@ -32,7 +32,6 @@ int main(int argc, char **argv) {
     size_t row = atoi(argv[1]);
     size_t dim = atoi(argv[2]);
     size_t col = atoi(argv[3]);
-    size_t thread_num = atoi(argv[4]);
 
     cout << "row = " << row << ", col = " << col << ", dim = " << dim << endl;
     CMatrix<double> matrixa(row, dim), matrixb(dim, col), res_matrix1, res_matrix2;
