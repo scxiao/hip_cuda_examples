@@ -94,17 +94,17 @@ int main(int argc, char **argv) {
     // call mfma fp32_16x16x4fp32 implementation to run on GPU
     res_matrix2.reset();
     timer.start();
-    ret = hip_matrix_mul_sgemm_16x16x16_fp32(matrix1, matrix2, res_matrix2, flops);
+    ret = hip_matrix_mul_sgemm_32x32x32_fp32(matrix1, matrix2, res_matrix2, flops);
     if (ret == false) {
-        cout << "hip_matrix_mul_shared failed, Matrix dimension mismatch!" << endl;
+        cout << "hip_matrix_mul_sgemm_32x32x32_fp32 failed, Matrix dimension mismatch!" << endl;
         return 1;
     }
     timer.stop();
     kernel_time_us = timer.gettime_us(); 
-    cout << "hip mfma_fp32_16x16x4fp32 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS" << std::endl;
+    cout << "hip hip_matrix_mul_sgemm_32x32x32_fp32 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS" << std::endl;
     ret = (res_matrix1 == res_matrix2);
     if (ret == false) {
-        cout << "hip shared implementation failed." << endl;
+        cout << "hip_matrix_mul_sgemm_32x32x32_fp32 failed." << endl;
         return 1;
     }
 

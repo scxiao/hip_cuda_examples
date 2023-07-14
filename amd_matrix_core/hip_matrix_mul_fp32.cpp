@@ -119,22 +119,27 @@ __global__ void sgemm_fp32_16x16x4_fp32_v1(const float *A, const float *B, float
 }
 
 // Version_2: 4 waves to handle tile size 32 x 32
-// The input tile size 32 is divided into 2 parts, so A becomes 2  16 x 32
+// The input tile size 32 is divided into 2 parts, so A becomes 2 16 x 32
 // and B becomes 2 32 x 16. Combine them together to get 4 submatrices
 // Each wave handles one submatrix
 __global__ void sgemm_fp32_16x16x4_fp32_v2(const float *A, const float *B, float *D, int M, int N, int K) {
     int LDA = K;
     int LDB = N;
     int LDD = N;
-    const int mfma_m = 16
-    const int mfma_n = 16
+    const int mfma_m = 16;
+    const int mfma_n = 16;
     const int mfma_k = 4;
 
-    // first 64 threads are in wave 1, and second 64 threads are in wave 2
-    int a_idx = (threadIdx.x + (threadIdx.y / mfma_k * mfma_m)) * LDA + (threadIdx.y % mfma_k);
-    int b_idx = (threadIdx.x + threadIdx.y / mfma_k * mfma_n) + (threadIdx.y % mfma_k) * LDB;
-
 #if __gfx90a__ || __gfx908__
+    // first 64 threads are in wave 1, and second 64 threads are in wave 2
+    int wi = threadIdx.y / mfma_k;
+    int wii = threadIdx.y % mfma_k;
+    int wi_m = wi % 2;
+    int wi_n = wi / 2;
+
+    int a_idx = (threadIdx.x + wi_m * mfma_m) * LDA + wii;
+    int b_idx = threadIdx.x + wi_n * mfma_n + wii * LDB;
+
     using float4 = __attribute__((__vector_size__(4 * sizeof(float)) )) float;
     float4 d = {0};
     for (int i = 0; i < K / mfma_k; ++i) {
@@ -143,10 +148,10 @@ __global__ void sgemm_fp32_16x16x4_fp32_v2(const float *A, const float *B, float
         d = __builtin_amdgcn_mfma_f32_16x16x4f32(a, b, d, 0, 0, 0);
         a_idx += mfma_k;
         b_idx += mfma_k * LDB;
-    }
+    }    
 
     for (int i = 0; i < 4; ++i) {
-        int d_idx = threadIdx.x + i * LDD + threadIdx.y * 4 * LDD;
+        int d_idx = threadIdx.x + wi_n * mfma_n + (wi_m * mfma_m + wii * mfma_k + i) * LDD;
         D[d_idx] = d[i];
     }
 #endif
@@ -282,7 +287,7 @@ bool hip_matrix_mul_sgemm_32x32x32_fp32(CMatrix<float> &in1, CMatrix<float> &in2
         return false;
     }
 
-    dim3 grid_dim_v2 = dim(1, 1);
-    dim3 block_dim_v2 = dim(16, 16);
+    dim3 grid_dim_v2 = dim3(1, 1);
+    dim3 block_dim_v2 = dim3(16, 16);
     return run_kernel(sgemm_fp32_16x16x4_fp32_v2, grid_dim_v2, block_dim_v2, 0, in1, in2, res, flops);
 }
