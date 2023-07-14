@@ -22,9 +22,9 @@ __global__ void hipkernel_matrix_mul_naive(float *in1, float *in2, float *res,
     return;
 }
 
-#define BLOCK_SIZE_M 16
-#define BLOCK_SIZE_N 16
-#define BLOCK_SIZE_K 16
+#define BLOCK_SIZE_M 32
+#define BLOCK_SIZE_N 32
+#define BLOCK_SIZE_K 32
 
 __global__ void hipkernel_matrix_mul_shared(float *in1, float *in2, float *res,
         size_t row, size_t dim, size_t column) {
@@ -91,16 +91,17 @@ __global__ void hipkernel_matrix_mul_dynamic_shared(float *in1, float *in2, floa
     return;
 }
 
-
-__global__ void sgemm_16x16x4(const float *A, const float *B, float *D, int M, int K, int N) {
+// Version_1: 1 wave to handle tile size 16x16
+__global__ void sgemm_fp32_16x16x4_fp32_v1(const float *A, const float *B, float *D, int M, int N, int K) {
     int LDA = K;
     int LDB = N;
     int LDD = N;
-#if __gfx90a__ || __gfx908__
-    using float4 = __attribute__((__vector_size__(4 * sizeof(float)) )) float;
+
     int a_idx = threadIdx.x * LDA + threadIdx.y;
     int b_idx = threadIdx.x + threadIdx.y * LDB;
 
+#if __gfx90a__ || __gfx908__
+    using float4 = __attribute__((__vector_size__(4 * sizeof(float)) )) float;
     float4 d = {0};
     for (int i = 0; i < 4; ++i) {
         float a = A[a_idx];
@@ -116,6 +117,64 @@ __global__ void sgemm_16x16x4(const float *A, const float *B, float *D, int M, i
     }
 #endif
 }
+
+// Version_2: 4 waves to handle tile size 32 x 32
+// The input tile size 32 is divided into 2 parts, so A becomes 2  16 x 32
+// and B becomes 2 32 x 16. Combine them together to get 4 submatrices
+// Each wave handles one submatrix
+__global__ void sgemm_fp32_16x16x4_fp32_v2(const float *A, const float *B, float *D, int M, int N, int K) {
+    int LDA = K;
+    int LDB = N;
+    int LDD = N;
+    const int mfma_m = 16
+    const int mfma_n = 16
+    const int mfma_k = 4;
+
+    // first 64 threads are in wave 1, and second 64 threads are in wave 2
+    int a_idx = (threadIdx.x + (threadIdx.y / mfma_k * mfma_m)) * LDA + (threadIdx.y % mfma_k);
+    int b_idx = (threadIdx.x + threadIdx.y / mfma_k * mfma_n) + (threadIdx.y % mfma_k) * LDB;
+
+#if __gfx90a__ || __gfx908__
+    using float4 = __attribute__((__vector_size__(4 * sizeof(float)) )) float;
+    float4 d = {0};
+    for (int i = 0; i < K / mfma_k; ++i) {
+        float a = A[a_idx];
+        float b = B[b_idx];
+        d = __builtin_amdgcn_mfma_f32_16x16x4f32(a, b, d, 0, 0, 0);
+        a_idx += mfma_k;
+        b_idx += mfma_k * LDB;
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        int d_idx = threadIdx.x + i * LDD + threadIdx.y * 4 * LDD;
+        D[d_idx] = d[i];
+    }
+#endif
+}
+
+// __global__ void sgemm_16x16x4_tile(const float *A, const float *B, float *D, int M, int K, int N) {
+// #if __gfx90a__ || __gfx908__
+//     extern __shared__ float shared_mem[];
+//     float *in_shared1 = shared_mem;
+//     float *in_shared2 = shared_mem + BLOCK_SIZE_M * (BLOCK_SIZE_K + 1);
+
+//     size_t b_idx = blockIdx.x;
+//     size_t b_idy = blockIdx.y;
+//     size_t t_idx = threadIdx.x;
+//     size_t t_idy = threadIdx.y;
+
+//     float4 sum = 0.0;
+//     size_t stride1 = BLOCK_SIZE_K + 1;
+//     size_t stride2 = BLOCK_SIZE_N + 1;
+//     for (size_t tile_idx = 0; tile_idx < dim; tile_idx += BLOCK_SIZE_K) {
+//         in_shared1[t_idx * stride1 + t_idy] = in1[(b_idx * BLOCK_SIZE_M + t_idx) * dim + tile_idx + t_idy];
+//         in_shared2[t_idx * stride2 + t_idy] = in2[(tile_idx + t_idx) * column + b_idy * BLOCK_SIZE_N + t_idy];
+//         __syncthreads();
+//         sum = 
+//     }
+
+// #endif
+// }
 
 template<class T>
 bool run_kernel(T kernel, const dim3& grid_size, const dim3& block_size, size_t lds_size,
@@ -203,16 +262,27 @@ bool hip_matrix_mul_sgemm_16x16x16_fp32(CMatrix<float> &in1, CMatrix<float> &in2
     size_t row, dim1, dim2, column;
     in1.get_size(row, dim1);
     in2.get_size(dim2, column);
-    size_t block_dimx = BLOCK_SIZE_M;
-    size_t block_dimy = BLOCK_SIZE_N;
-
     if (dim1 != dim2) {
         cout << "Matrix dimensions mismatch!" << endl;
         return false;
     }
 
-    dim3 grid_dim = dim3(1, 1);
-    dim3 block_dim = dim3(16, 4);
+    dim3 grid_dim_v1 = dim3(1, 1);
+    dim3 block_dim_v1 = dim3(16, 4);
 
-    return run_kernel(sgemm_16x16x4, grid_dim, block_dim, 0, in1, in2, res, flops);
+    run_kernel(sgemm_fp32_16x16x4_fp32_v1, grid_dim_v1, block_dim_v1, 0, in1, in2, res, flops);
+}
+
+bool hip_matrix_mul_sgemm_32x32x32_fp32(CMatrix<float> &in1, CMatrix<float> &in2, CMatrix<float> &res, double& flops) {
+    size_t row, dim1, dim2, column;
+    in1.get_size(row, dim1);
+    in2.get_size(dim2, column);
+    if (dim1 != dim2) {
+        cout << "Matrix dimensions mismatch!" << endl;
+        return false;
+    }
+
+    dim3 grid_dim_v2 = dim(1, 1);
+    dim3 block_dim_v2 = dim(16, 16);
+    return run_kernel(sgemm_fp32_16x16x4_fp32_v2, grid_dim_v2, block_dim_v2, 0, in1, in2, res, flops);
 }

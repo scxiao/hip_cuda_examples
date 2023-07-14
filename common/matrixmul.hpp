@@ -266,9 +266,11 @@ bool CMatrix<T>::operator == (const CMatrix<T> &matrix) {
         return false;
     }
 
+    T atol = 1e-3f;
+    T rtol = 1e-3f;
     size_t i, len = m_row * m_column;
     for (i = 0; i < len; ++i) {
-        if (m_buffer[i] != matrix.m_buffer[i]) {
+        if (std::fabs(m_buffer[i] - matrix.m_buffer[i]) > atol + rtol * m_buffer[i]) {
             cout << "m1[" << i << "] = " << m_buffer[i] << ", ";
             cout << "m2[" << i << "] = " << matrix.m_buffer[i] << endl;
             return false;

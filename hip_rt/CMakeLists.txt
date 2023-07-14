@@ -18,8 +18,9 @@ message("cmake_current_src_dir = " ${CMAKE_SOURCE_DIR})
 message("cmake_current_bin_dir = " ${CMAKE_BINARY_DIR})
 
 set(test_examples 
-    test_kernel_launch.cpp
-    test_module_kernel_launch.cpp)
+    test_mm_kernel_launch.cpp
+    test_mm_mod_kernel_launch.cpp
+    test_vec_add.cpp)
 
 foreach(filepath_name ${test_examples})
     get_filename_component(src_name ${filepath_name} NAME)

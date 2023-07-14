@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     hiprtcProgram mm_prog;
     hiprtcCreateProgram(&mm_prog,   // prog
                         mm_naive,   // buffer
-                        "mm.hsaco", // name
+                        "mm.abc", // name
                         0,          // numHeaders
                         nullptr,    // headers
                         nullptr);   // includeNames
