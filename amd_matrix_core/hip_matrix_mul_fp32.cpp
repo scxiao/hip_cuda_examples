@@ -213,7 +213,7 @@ bool hip_matrix_mul_sgemm_16x16x16_fp32(CMatrix<float> &in1, CMatrix<float> &in2
     dim3 grid_dim_v1 = dim3(1, 1);
     dim3 block_dim_v1 = dim3(16, 4);
 
-    run_kernel(sgemm_fp32_16x16x4_fp32_v1, grid_dim_v1, block_dim_v1, 0, in1, in2, res, flops);
+    return run_kernel(sgemm_fp32_16x16x4_fp32_v1, grid_dim_v1, block_dim_v1, 0, in1, in2, res, flops);
 }
 
 // Matrix multiplication, call MFMA instructions
@@ -307,7 +307,7 @@ __global__ void sgemm_16x16x4_tile(const float *A, const float *B, float *D, int
     int sldc = sldb;
     float *in_shared_a = shared_mem;
     float *in_shared_b = shared_mem + TILE_SIZE_M * slda;
-    float *in_shared_c = shared_mem + TILE_SIZE_K * sldc;
+    float *in_shared_c = shared_mem + TILE_SIZE_M * slda + TILE_SIZE_K * sldc;
 
     size_t b_idx = blockIdx.x;
     size_t b_idy = blockIdx.y;
@@ -316,42 +316,64 @@ __global__ void sgemm_16x16x4_tile(const float *A, const float *B, float *D, int
     size_t block_size_m = blockDim.x;
     size_t block_size_n = blockDim.y;
 
-    // int idx00 = t_idx * sldc + t_idy;
-    // in_shared_c[idx00] = 0.0f;
-    // int idx01 = idx00 + block_size_n;
-    // in_shared_c[idx01] = 0.0f;
-    // int idx10 = idx00 + block_size_m * sldc;
-    // in_shared_c[idx10] = 0.0f;
-    // int idx11 = idx10 + block_size_n;
-    // in_shared_c[idx11] = 0.0f;
-
-
-    int idx00 = (TILE_SIZE_M * b_idx + t_idx) * N + TILE_SIZE_N * b_idy + t_idy;
-    D[idx00] = 0.0f;
-    int idx01 = idx00 + block_size_n;
-    D[idx01] = 0.0f;
-    int idx10 = idx00 + block_size_m * N;
-    D[idx10] = 0.0f;
-    int idx11 = idx10 + block_size_n;
-    D[idx11] = 0.0f;
+    for (int i = 0; i < TILE_SIZE_M; i += block_size_m) {
+        for (int j = 0; j < TILE_SIZE_N; j += block_size_n) {
+            int idx = (t_idx + i) * sldc + t_idy + j;
+            in_shared_c[idx] = 0.0f;
+        }
+    }
 
     for (size_t tile_idx = 0; tile_idx < K; tile_idx += TILE_SIZE_K) {
-        in_shared_a[t_idx * slda + t_idy] = A[(b_idx * TILE_SIZE_M + t_idx) * K + tile_idx + t_idy];
-        in_shared_a[t_idx * slda + t_idy + block_size_n] = A[(b_idx * TILE_SIZE_M + t_idx) * K + tile_idx + t_idy + block_size_n];
-        in_shared_a[(t_idx + block_size_m) * slda + t_idy] = A[(b_idx * TILE_SIZE_M + t_idx + block_size_m) * K + tile_idx + t_idy];
-        in_shared_a[(t_idx + block_size_m) * slda + t_idy + block_size_n] = A[(b_idx * TILE_SIZE_M + t_idx + block_size_m) * K + tile_idx + t_idy + block_size_n];
+        // copy A from global memory to LDS
+        for (int i = 0; i < TILE_SIZE_M; i += block_size_m) {
+            for (int j = 0; j < TILE_SIZE_K; j += block_size_n) {
+                int s_idx = (t_idx + i) * slda + (t_idy + j);
+                int g_idx = (b_idx * TILE_SIZE_M + t_idx + i) * K + (tile_idx + t_idy + j);
+                in_shared_a[s_idx] = A[g_idx];
+            }
+        }
 
-        in_shared_b[t_idx * sldb + t_idy] = B[(tile_idx + t_idx) * N + b_idy * TILE_SIZE_N + t_idy];
-        in_shared_b[t_idx * sldb + t_idy + block_size_n] = B[(tile_idx + t_idx) * N + b_idy * TILE_SIZE_N + t_idy + block_size_n];
-        in_shared_b[(t_idx + block_size_m) * sldb + t_idy] = B[(tile_idx + t_idx + block_size_m) * N + b_idy * TILE_SIZE_N + t_idy];
-        in_shared_b[(t_idx + block_size_m) * sldb + t_idy + block_size_n] = B[(tile_idx + t_idx + block_size_m) * N + b_idy * TILE_SIZE_N + t_idy + block_size_n];
+        // copy B from global memory to LDS
+        for (int j = 0; j < TILE_SIZE_N; j += block_size_n) {
+            for (int i = 0; i < TILE_SIZE_K; i += block_size_m) {
+                int s_idx = (t_idx + i) * sldb + t_idy + j;
+                int g_idx = (tile_idx + t_idx + i) * N + (b_idy * TILE_SIZE_N + t_idy + j);
+                in_shared_b[s_idx] = B[g_idx];
+            }
+        }
+
+        // in_shared_a[t_idx * slda + t_idy] = A[(b_idx * TILE_SIZE_M + t_idx) * K + tile_idx + t_idy];
+        // in_shared_a[t_idx * slda + t_idy + block_size_n] = A[(b_idx * TILE_SIZE_M + t_idx) * K + tile_idx + t_idy + block_size_n];
+        // in_shared_a[(t_idx + block_size_m) * slda + t_idy] = A[(b_idx * TILE_SIZE_M + t_idx + block_size_m) * K + tile_idx + t_idy];
+        // in_shared_a[(t_idx + block_size_m) * slda + t_idy + block_size_n] = A[(b_idx * TILE_SIZE_M + t_idx + block_size_m) * K + tile_idx + t_idy + block_size_n];
+
+        // // copy B from global memory to LDS
+        // in_shared_b[t_idx * sldb + t_idy] = B[(tile_idx + t_idx) * N + b_idy * TILE_SIZE_N + t_idy];
+        // in_shared_b[t_idx * sldb + t_idy + block_size_n] = B[(tile_idx + t_idx) * N + b_idy * TILE_SIZE_N + t_idy + block_size_n];
+        // in_shared_b[(t_idx + block_size_m) * sldb + t_idy] = B[(tile_idx + t_idx + block_size_m) * N + b_idy * TILE_SIZE_N + t_idy];
+        // in_shared_b[(t_idx + block_size_m) * sldb + t_idy + block_size_n] = B[(tile_idx + t_idx + block_size_m) * N + b_idy * TILE_SIZE_N + t_idy + block_size_n];
 
         __syncthreads();
-        int block_offset = (b_idx * TILE_SIZE_M) * N + b_idy * TILE_SIZE_N;
-        float *bd = D + block_offset;
-        sgemm_fp32_16x16x4_fp32_device(in_shared_a, in_shared_b, bd, slda, sldb, N, TILE_SIZE_K);
+        sgemm_fp32_16x16x4_fp32_device(in_shared_a, in_shared_b, in_shared_c, slda, sldb, sldc, TILE_SIZE_K);
         __syncthreads();
     }
+
+    for (int i = 0; i < TILE_SIZE_M; i += block_size_m) {
+        for (int j = 0; j < TILE_SIZE_N; j += block_size_n) {
+            int s_idx = (t_idx + i) * sldc + t_idy + j;
+            int g_idx = (b_idx * TILE_SIZE_M + t_idx + i) * N + (b_idy * TILE_SIZE_N + t_idy + j);
+            D[g_idx] = in_shared_c[s_idx];
+        }
+    }
+
+    // int i00 = (TILE_SIZE_M * b_idx + t_idx) * N + TILE_SIZE_N * b_idy + t_idy;
+    // D[i00] = in_shared_c[idx00];
+    // int i01 = i00 + block_size_n;
+    // D[i01] = in_shared_c[idx01];
+    // int i10 = i00 + block_size_m * N;
+    // D[i10] = in_shared_c[idx10];
+    // int i11 = i10 + block_size_n;
+    // D[i11] = in_shared_c[idx11];
 }
 
 
