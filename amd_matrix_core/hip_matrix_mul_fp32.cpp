@@ -223,7 +223,7 @@ bool hip_matrix_mul_sgemm_16x16x16_fp32(CMatrix<float> &in1, CMatrix<float> &in2
 // Matrix multiplication, call MFMA instructions
 #define TILE_SIZE_M 32
 #define TILE_SIZE_N 32
-#define TILE_SIZE_K 16
+#define TILE_SIZE_K 32
 
 // kernel to handle matrix multiplication with 
 // size: TILE_SIZE_M, TILE_SIZE_N, and TILE_SIZE_K (32, 32, 32)
@@ -406,7 +406,7 @@ __device__ void sgemm_fp32_32x32x2_fp32_device(const float *sa, const float *sb,
 
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
-            bd[threadIdx.x + (4 * threadIdx.y + j + 4 * i)* ldd] = d[j + 4 * i];
+            bd[threadIdx.x + (4 * threadIdx.y + j + 8 * i)* ldd] += d[j + 4 * i];
         }
     }
 #endif
@@ -436,14 +436,14 @@ __global__ void sgemm_32x32xK_tile_v2(const float *A, const float *B, float *D, 
 
     for (int tile_idx = 0; tile_idx < K; tile_idx += TILE_SIZE_K) {
         // copy A from global memory to LDS
-        for (int i = 0; i < TILE_SIZE_N; i += block_size_n) {
+        for (int i = 0; i < TILE_SIZE_K; i += block_size_n) {
             int s_idx = t_idx * slda + t_idy + i;
             int g_idx = (b_idx * TILE_SIZE_M + t_idx) * K + (tile_idx + t_idy + i);
             in_shared_a[s_idx] = A[g_idx];
         }
 
         // copy B from global memory to LDS
-        for (int j = 0; j < TILE_SIZE_N; j += block_size_n) {
+        for (int j = 0; j < TILE_SIZE_K; j += block_size_n) {
             int s_idx = (t_idy + j) * sldb + t_idx;
             int g_idx = (tile_idx + t_idy + j) * N + (b_idy * TILE_SIZE_N + t_idx);
             in_shared_b[s_idx] = B[g_idx];
@@ -473,7 +473,9 @@ bool hip_matrix_mul_sgemm_32x32xK_fp32_v2(CMatrix<float> &in1, CMatrix<float> &i
     const int block_size_m = TILE_SIZE_M;
     const int block_size_n = 2;
 
-    size_t lds_size = TILE_SIZE_M * (TILE_SIZE_K + 1) + TILE_SIZE_K * (TILE_SIZE_N + 1) + TILE_SIZE_M * (TILE_SIZE_N + 1);
+    size_t lds_size = TILE_SIZE_M * (TILE_SIZE_K + 1);
+    lds_size += TILE_SIZE_K * (TILE_SIZE_N + 1);
+    lds_size += TILE_SIZE_M * (TILE_SIZE_N + 1);
     lds_size *= sizeof(float);
 
     dim3 grid_dim_v2 = dim3((row + TILE_SIZE_M - 1) / TILE_SIZE_M, (column + TILE_SIZE_N - 1) / TILE_SIZE_N);
