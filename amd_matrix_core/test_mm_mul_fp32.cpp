@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // call mfma fp32_16x16x4fp32 implementation to run on GPU
+    // call mfma fp32_32x32x2fp32 implementation to run on GPU
     res_matrix2.reset();
     timer.start();
     ret = hip_matrix_mul_sgemm_32x32xK_fp32_v2(matrix1, matrix2, res_matrix2, flops);
@@ -122,6 +122,23 @@ int main(int argc, char **argv) {
     ret = (res_matrix1 == res_matrix2);
     if (ret == false) {
         cout << "hip_matrix_mul_sgemm_32x32xK_fp32_v2 failed." << endl;
+        return 1;
+    }
+
+    // call mfma fp32_16x16x1fp32 implementation to run on GPU
+    res_matrix2.reset();
+    timer.start();
+    ret = hip_matrix_mul_sgemm_32x32xK_fp32_v3(matrix1, matrix2, res_matrix2, flops);
+    if (ret == false) {
+        cout << "hip_matrix_mul_sgemm_32x32xK_fp32_v3 failed, Matrix dimension mismatch!" << endl;
+        return 1;
+    }
+    timer.stop();
+    kernel_time_us = timer.gettime_us(); 
+    cout << "hip hip_matrix_mul_sgemm_32x32xK_fp32_v3 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS" << std::endl;
+    ret = (res_matrix1 == res_matrix2);
+    if (ret == false) {
+        cout << "hip_matrix_mul_sgemm_32x32xK_fp32_v3 failed." << endl;
         return 1;
     }
 
