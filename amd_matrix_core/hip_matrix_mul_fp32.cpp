@@ -223,7 +223,7 @@ bool hip_matrix_mul_sgemm_16x16x16_fp32(CMatrix<float> &in1, CMatrix<float> &in2
 // Matrix multiplication, call MFMA instructions
 #define TILE_SIZE_M 32
 #define TILE_SIZE_N 32
-#define TILE_SIZE_K 16
+#define TILE_SIZE_K 32
 
 // kernel to handle matrix multiplication with 
 // size: TILE_SIZE_M, TILE_SIZE_N, and TILE_SIZE_K (32, 32, 32)
@@ -311,7 +311,7 @@ __global__ void sgemm_32x32xK_tile_v1(const float *A, const float *B, float *D, 
     int sldc = sldb;
     float *in_shared_a = shared_mem;
     float *in_shared_b = shared_mem + TILE_SIZE_M * slda;
-    float *in_shared_c = shared_mem + TILE_SIZE_M * slda + TILE_SIZE_K * sldc;
+    float *in_shared_c = shared_mem + TILE_SIZE_M * slda + TILE_SIZE_K * sldb;
 
     size_t b_idx = blockIdx.x;
     size_t b_idy = blockIdx.y;
@@ -419,7 +419,7 @@ __global__ void sgemm_32x32xK_tile_v2(const float *A, const float *B, float *D, 
     int sldc = sldb;
     float *in_shared_a = shared_mem;
     float *in_shared_b = shared_mem + TILE_SIZE_M * slda;
-    float *in_shared_c = shared_mem + TILE_SIZE_M * slda + TILE_SIZE_K * sldc;
+    float *in_shared_c = shared_mem + TILE_SIZE_M * slda + TILE_SIZE_K * sldb;
 
     size_t b_idx = blockIdx.x;
     size_t b_idy = blockIdx.y;
@@ -532,7 +532,7 @@ __global__ void sgemm_32x32xK_tile_v3(const float *A, const float *B, float *D, 
     const int stride_c = TILE_SIZE_M * sldc;
     float *in_shared_a = shared_mem;
     float *in_shared_b = shared_mem + TILE_SIZE_M * slda;
-    float *in_shared_c = shared_mem + TILE_SIZE_M * slda + TILE_SIZE_K * sldc;
+    float *in_shared_c = shared_mem + TILE_SIZE_M * slda + TILE_SIZE_K * sldb;
 
     size_t b_idx = blockIdx.x;
     size_t b_idy = blockIdx.y;
@@ -563,7 +563,7 @@ __global__ void sgemm_32x32xK_tile_v3(const float *A, const float *B, float *D, 
         for (int i = 0; i < TILE_SIZE_N; i += block_size_m) {
             for (int j = 0; j < TILE_SIZE_K; j += block_size_n) {
                 int s_idx = (t_idy + j) * sldb + t_idx + i;
-                int g_idx = (tile_idx + t_idy + j) * N + (b_idy * TILE_SIZE_N + t_idx);
+                int g_idx = (tile_idx + t_idy + j) * N + (b_idy * TILE_SIZE_N + t_idx + i);
                 in_shared_b[s_idx] = B[g_idx];
             }
         }

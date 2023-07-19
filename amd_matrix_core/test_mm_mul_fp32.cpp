@@ -25,7 +25,8 @@ int main(int argc, char **argv) {
     double flops;
 
     timer.start();
-    bool ret = matrix1.multiply_optim(matrix2, res_matrix1);
+    // bool ret = matrix1.multiply_optim(matrix2, res_matrix1);
+    bool ret = matrix1.multiply_parallel(matrix2, 16, res_matrix1);
     if (ret == false) {
         cout << "matrix dimension is incorrect, cannot multiplication." << endl;
         return 1;
@@ -34,7 +35,7 @@ int main(int argc, char **argv) {
     cout << "Sequential time = ";
     timer.printtime_ms();
 
-    size_t num = 4;
+    size_t num = 8;
     while (num <= thread_num) {
         timer.start();
         ret = matrix1.multiply_parallel(matrix2, num, res_matrix2);
