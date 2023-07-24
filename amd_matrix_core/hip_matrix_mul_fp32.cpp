@@ -620,9 +620,15 @@ __device__ void sgemm_fp32_4x4x1_fp32_device(const float *sa, const float *sb, f
     const int mfma_n = 4;
     const int mfma_k = 1;
 
+    int wid = threadIdx.y / 4;
+    int widd = threadIdx.y % 4;
+    int widx = widd % 2;
+    int widy = widd / 2;
+
+
 #if __gfx90a__ || __gfx908__
-    int a_idx = (threadIdx.x + threadIdx.y % 2) * lda;
-    int b_idx = (threadIdx.x % 8) + threadIdx.y / 2 * mfma_n * 2;
+    int a_idx = (threadIdx.x + widx * 16) * lda;
+    int b_idx = threadIdx.x % 4 + widy * 4 + wid * 8;
 
     using float4 = __attribute__((__vector_size__(4 * sizeof(float)) )) float;
     float4 d = {0};
@@ -635,7 +641,7 @@ __device__ void sgemm_fp32_4x4x1_fp32_device(const float *sa, const float *sb, f
     }    
 
     for (int i = 0; i < 4; ++i) {
-        int sidx = (threadIdx.x % 4) + (threadIdx.y % 2) * mfma_n + (threadIdx.y / 2 * 2 * mfma_n)  + ((threadIdx.x / mfma_m) * mfma_m + i) * ldd;
+        int sidx = (threadIdx.x % 4) + widy * 4 + wid * 8  + ((threadIdx.x / mfma_m) * mfma_m + widx * 16 + i) * ldd;
         bd[sidx] += d[i];
     }
 #endif
