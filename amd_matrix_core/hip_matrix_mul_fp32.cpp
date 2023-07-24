@@ -620,8 +620,8 @@ __device__ void sgemm_fp32_4x4x1_fp32_device(const float *sa, const float *sb, f
     const int mfma_n = 4;
     const int mfma_k = 1;
 
-    int wid = threadIdx.y / 4;
-    int widd = threadIdx.y % 4;
+    int wid = threadIdx.y / mfma_n;
+    int widd = threadIdx.y % mfma_n;
     int widx = widd % 2;
     int widy = widd / 2;
 
