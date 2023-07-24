@@ -143,6 +143,23 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    // call mfma fp32_4x4x1_16fp32 implementation to run on GPU
+    res_matrix2.reset();
+    timer.start();
+    ret = hip_matrix_mul_sgemm_32x32xK_fp32_v4(matrix1, matrix2, res_matrix2, flops);
+    if (ret == false) {
+        cout << "hip_matrix_mul_sgemm_32x32xK_fp32_v4 failed, Matrix dimension mismatch!" << endl;
+        return 1;
+    }
+    timer.stop();
+    kernel_time_us = timer.gettime_us(); 
+    cout << "hip hip_matrix_mul_sgemm_32x32xK_fp32_v4 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS" << std::endl;
+    ret = (res_matrix1 == res_matrix2);
+    if (ret == false) {
+        cout << "hip_matrix_mul_sgemm_32x32xK_fp32_v4 failed." << endl;
+        return 1;
+    }
+
  //   // call hip rocblas implementation to run on GPU
  //   timer.start();
  //   ret = cu_matrix_mul_cublas(matrix1, matrix2, res_matrix2);
