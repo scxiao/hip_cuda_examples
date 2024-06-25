@@ -53,20 +53,36 @@ int main(int argc, char **argv) {
     hipMemcpyAsync(mat_bd, matrixb.get_buffer(), sizeof(double) * dim * col, hipMemcpyHostToDevice,0);
     // Initializing variable Done
 
+    int iter_num = 100;
+    std::vector<hipEvent_t> start(iter_num), stop(iter_num);
+    for (int iter = 0; iter < iter_num; ++iter) {
+        hipEventCreate(&start[iter]);
+        hipEventCreate(&stop[iter]);
+    }
+
     // Launching Kernel Begin
     dim3 blockDim(32,32,1);
     int gridX = (row + blockDim.x - 1)/blockDim.x;
     int gridY = (col + blockDim.y - 1)/blockDim.y;
     dim3 gridDim(gridX,gridY,1);
-    for (int iter = 0; iter < 100; ++iter)
-    hipLaunchKernelGGL(hipkernel_matrix_mul_naive, gridDim, blockDim, 
-                       0/*dynamicShared*/, 0/*stream*/, 
-                       mat_ad, mat_bd, mat_cd, row, dim, col);
+    for (int iter = 0; iter < iter_num; ++iter) {
+        hipEventRecord(start[iter], 0);
+        hipLaunchKernelGGL(hipkernel_matrix_mul_naive, gridDim, blockDim, 
+                        0/*dynamicShared*/, 0/*stream*/, 
+                        mat_ad, mat_bd, mat_cd, row, dim, col);
+        hipEventRecord(stop[iter], 0);
+    }
     hipStreamSynchronize(0); 
     assert(hipGetLastError() == 0);
     // Launching Kernel Done
     res_matrix2.resize(row, col);
     hipMemcpy(res_matrix2.get_buffer(), mat_cd, sizeof(double) * row * col, hipMemcpyDeviceToHost);
+
+    std::vector<float> gpu_time(iter_num, 0.0f);
+    for (int iter = 0; iter < iter_num; ++iter) {
+        hipEventElapsedTime(&gpu_time[iter], start[iter], stop[iter]);
+        std::cout << gpu_time[iter] << std::endl;
+    }
 
     // Clean up
     assert (hipFree(mat_ad) == 0);
