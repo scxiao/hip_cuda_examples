@@ -5,8 +5,8 @@ add_definitions(-D__NVCC__)
 enable_language(CUDA)
 #set (CMAKE_CXX_STANDARD 11)
 
-include_directories(/usr/local/cuda-11.8/include ../common)
-link_directories(/usr/local/cuda-11.8/lib64)
+include_directories(/usr/local/cuda/include ../common)
+link_directories(/usr/local/cuda/lib64)
 
 message("cmake_current_src_dir = " ${CMAKE_SOURCE_DIR})
 message("cmake_current_bin_dir = " ${CMAKE_BINARY_DIR})
