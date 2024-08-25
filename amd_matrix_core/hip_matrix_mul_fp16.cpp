@@ -6,49 +6,6 @@
 #include "timer.hpp"
 
 /*
- * use 1 wave and the mfma32x32x8xf16 instruction to do the computation, tile_size is 64 x 64
- * block dim(32, 2)
-*/
-__device__ void hgemm_32x32x8_fp16_device(__half *A, __half *B, __half *C, int M, int K, int N) {
-#if __gfx90a__ || __gfx908__ || __gfx942__
-    // using float16x8 = __attribute__((__vector_size__(8 * sizeof(__half)))) __half;
-    using float16x8 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
-    using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
-
-    float16x8 a[2];
-    float16x8 b[2];
-    floatx16 d[4] = {0};
-    // first quarter
-    for (int k = 0; k < 64; k += 8) {
-        for (int i = 0; i < 4; ++i) {
-            a[0][2 * i + threadIdx.y] = A[threadIdx.x * K + threadIdx.y + 2 * i + k];
-            a[1][2 * i + threadIdx.y] = A[(threadIdx.x + 32) * K + threadIdx.y + 2 * i + k];
-            b[0][2 * i + threadIdx.y] = B[threadIdx.x * N + threadIdx.y + 2 * i + k];
-            b[1][2 * i + threadIdx.y] = B[(threadIdx.x + 32) * N + threadIdx.y + 2 * i + k];
-        }
-
-        d[0] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[0], d[0], 0, 0, 0);
-        d[1] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[1], d[1], 0, 0, 0);
-        d[2] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[0], d[2], 0, 0, 0);
-        d[3] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[1], d[3], 0, 0, 0);
-    }
-
-    for (int i = 0; i < 4; ++i) {
-        int i1 = i % 2;
-        int i2 = i / 2;
-        int offset = i1 * 32 + i2 * 32 * N;
-        for (int j = 0; j < 16; ++j) {
-            int j1 = j % 4;
-            int j2 = j / 4;
-            int idx = threadIdx.x + (4 * threadIdx.y + j1 + 8 * j2) * N + offset;
-            C[idx] = d[i][j];
-        }
-    }
-#endif
-}
-
-
-/*
  * use 1 wave and the mfma4x4x16xf16 instruction to do the computation, tile_size is 64 x 64
  * block dim(32, 2)
  */
@@ -96,6 +53,52 @@ __device__ void hgemm_4x4x16_fp16_device(__half *A, __half *B, __half *C, int M,
 }
 
 
+/*
+ * use 1 wave and the mfma32x32x8xf16 instruction to do the computation, tile_size is 64 x 64
+ * block dim(32, 2)
+*/
+__device__ void hgemm_32x32x8_fp16_device(__half *sa, __half *sb, __half *sc, int sam, int sak, int sbn, int sbk, int scm, int scn) {
+#if __gfx90a__ || __gfx908__ || __gfx942__
+    // using float16x8 = __attribute__((__vector_size__(8 * sizeof(__half)))) __half;
+    using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
+    using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
+    // threadsPerWarp [32, 2]
+    int tidx = threadIdx.x % 32;
+    int tidy = threadIdx.y / 32;
+
+    float16x4 a[2];
+    float16x4 b[2];
+    floatx16 d[4] = {0};
+    // first quarter
+    for (int k = 0; k < 64; k += 8) {
+        for (int i = 0; i < 4; ++i) {
+            // a[0] is for upper half of sa, a[1] is for lower half of sa
+            a[0][i] = sa[tidx * sak + i + 4 * tidy + k];
+            a[1][i] = sa[(tidx + 32) * sak + i + 4 * tidy + k];
+            b[0][i] = sb[tidx * sbk + i + 4 * tidy + k];
+            b[1][i] = sb[(tidx + 32) * sbk + i + 4 * tidy + k];
+        }
+
+        d[0] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[0], d[0], 0, 0, 0);
+        d[1] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[1], d[1], 0, 0, 0);
+        d[2] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[0], d[2], 0, 0, 0);
+        d[3] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[1], d[3], 0, 0, 0);
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        int i1 = i % 2;
+        int i2 = i / 2;
+        for (int j = 0; j < 16; ++j) {
+            int j1 = j % 4;
+            int j2 = j / 4;
+            int idx = tidx + i1 * 32 + (4 * tidy + j1 + 8 * j2 + i2 * 32) * scn;
+            sc[idx] = d[i][j];
+        }
+    }
+#endif
+}
+
+
 #define SHARED_SIZE 64
 #define SM SHARED_SIZE
 #define SK (SHARED_SIZE + 1)
@@ -105,21 +108,27 @@ __device__ void hgemm_4x4x16_fp16_device(__half *A, __half *B, __half *C, int M,
 
 __global__ void hip_hgemm_kernel_32x32x8f16(__half *A, __half *B, __half *C, int M, int N, int K) {
     const size_t size = SHARED_SIZE * (SHARED_SIZE + 1);
-    __shared__ __half a[SIZE], b[SIZE], c[SIZE];
+    __shared__ __half sa[SIZE], sb[SIZE], sc[SIZE];
+        int sam = SHARED_SIZE;
+        int sak = SHARED_SIZE + 1;
+        int sbn = SHARED_SIZE;
+        int sbk = SHARED_SIZE + 1;
+        int scm = SHARED_SIZE;
+        int scn = SHARED_SIZE + 1;
+
     for (int i = 0; i < K; i += 64) {
         for (int j = 0; j < 64; ++j) {
-            a[i * SK + threadIdx.x] = A[(blockIdx.x * 64 + i) * K + threadIdx.x + j];
-            b[threadIdx.x * SN + i] = B[blockIdx.y * 64 + threadIdx.x + (j + i) * N];
+            sa[j * sak + threadIdx.x] = A[(blockIdx.x * 64 + j) * K + threadIdx.x + i];
+            sb[j * sbk + threadIdx.x] = B[(blockIdx.y * 64 + j) * K + threadIdx.x + i];
         }
 
-        hgemm_32x32x8_fp16_device(a, b, c, SHARED_SIZE, SHARED_SIZE + 1, N);
+        hgemm_32x32x8_fp16_device(sa, sb, sc, sam, sak, sbn, sbk, scm, scn);
 
         for (int i = 0; i < 64; i++) {
-            C[(blockIdx.x * SHARED_SIZE + i) * N + blockIdx.y * SHARED_SIZE + threadIdx.x] = c[i * SN + threadIdx.x];
+            C[(blockIdx.x * 64 + i) * N + blockIdx.y * 64 + threadIdx.x] = sc[i * scn + threadIdx.x];
         }
     }
 }
-
 
 bool hip_matrix_mul_fp16_464(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix<__half> &res, double& flops) {
     size_t M, N, K1, K2, K;
@@ -136,7 +145,7 @@ bool hip_matrix_mul_fp16_464(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix
     hipMemcpy(db, in2.get_buffer(), sizeof(__half) * K * N, hipMemcpyHostToDevice);
 
     dim3 grid(M/64, N/64);
-    dim3 block(1, 1);
+    dim3 block(64, 1);
     hip_hgemm_kernel_32x32x8f16<<<grid, block>>>(da, db, dc, M, N, K);
     hipMemcpy((void*)in2.get_buffer(), dc, sizeof(__half) * M * N, hipMemcpyDeviceToHost);
 

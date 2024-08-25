@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < k; ++i) {
         for (int j = 0; j < n; ++j) {
-            matrix1_half.get_elem(i, j) = matrix1.get_elem(i, j);
+            matrix2_half.get_elem(i, j) = matrix2.get_elem(i, j);
         }
     } 
 
