@@ -32,6 +32,7 @@ set(
     test_mm_mul_fp64.cpp
     test_mm_mul_fp32.cpp
     test_mm_mul_fp16.cpp
+    test_mm_mul_int8.cpp
     )
 
 add_library(test_util SHARED ${lib_SRC})
