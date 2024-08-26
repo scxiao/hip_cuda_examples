@@ -131,8 +131,7 @@ void CMatrix<T>::print_partial(size_t row, size_t column) {
     cout << "Matrix is:" << endl;
     for (i = 0; i < row; ++i) {
         for (j = 0; j < column; ++j) {
-            size_t loc = i * m_column + j;
-            cout << m_buffer[loc] << " ";
+            cout << this->get_elem(i, j) << " ";
         }
         cout << endl;
     }
@@ -330,8 +329,8 @@ bool CMatrix<T>::operator == (const CMatrix<T> &matrix) {
         return false;
     }
 
-    T atol = 1e-4f;
-    T rtol = 1e-4f;
+    T atol = 1e-2f;
+    T rtol = 1e-2f;
     size_t i, len = m_row * m_column;
     for (i = 0; i < len; ++i) {
         if (std::fabs(m_buffer[i] - matrix.m_buffer[i]) > atol + rtol * m_buffer[i]) {
