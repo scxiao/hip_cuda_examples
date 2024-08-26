@@ -86,14 +86,12 @@ int main(int argc, char **argv) {
     timer.stop();
     size_t kernel_time_us = timer.gettime_us(); 
     cout << "hip_matrix_mul_f16_naive implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
-
     CMatrix<float> matrix_res_float(m, n);
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
             matrix_res_float.get_elem(i, j) = matrix_res_half.get_elem(i, j);
         }
     }
-
     ret = (res_matrix1 == matrix_res_float);
     if (ret == false) {
         cout << "hip_matrix_mul_f16_naive implementation failed." << endl;
@@ -104,14 +102,14 @@ int main(int argc, char **argv) {
     }
 
     timer.start();
-    ret = hip_matrix_mul_fp16_464(matrix1_half, matrix2_half, matrix_res_half, flops);
+    ret = hip_matrix_mul_32x32x8_fp16(matrix1_half, matrix2_half, matrix_res_half, flops);
     if (ret == false) {
-        cout << "hip_matrix_mul_fp16_464 failed, Matrix dimension mismatch!" << endl;
+        cout << "hip_matrix_mul_32x32x8_fp16 failed, Matrix dimension mismatch!" << endl;
         return 1;
     }
     timer.stop();
     kernel_time_us = timer.gettime_us(); 
-    cout << "hip_matrix_mul_fp16_464 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
+    cout << "hip_matrix_mul_32x32x8_fp16 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
 
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < n; ++j) {
@@ -121,12 +119,39 @@ int main(int argc, char **argv) {
 
     ret = (res_matrix1 == matrix_res_float);
     if (ret == false) {
-        cout << "hip mfma32x32x8f16 implementation failed." << endl;
+        cout << "hip hip_matrix_mul_32x32x8_fp16 implementation failed." << endl;
         return 1;
     }
     else {
         std::cout << ", PASSED!" << std::endl;
     }
+
+
+    timer.start();
+    ret = hip_matrix_mul_4x4x4_fp16_464(matrix1_half, matrix2_half, matrix_res_half, flops);
+    if (ret == false) {
+        cout << "hip_matrix_mul_4x4x4_fp16_464 failed, Matrix dimension mismatch!" << endl;
+        return 1;
+    }
+    timer.stop();
+    kernel_time_us = timer.gettime_us(); 
+    cout << "hip_matrix_mul_4x4x4_fp16_464 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
+
+    for (int i = 0; i < m; ++i) {
+        for (int j = 0; j < n; ++j) {
+            matrix_res_float.get_elem(i, j) = matrix_res_half.get_elem(i, j);
+        }
+    }
+
+    ret = (res_matrix1 == matrix_res_float);
+    if (ret == false) {
+        cout << "hip hip_matrix_mul_4x4x4_fp16_464 implementation failed." << endl;
+        return 1;
+    }
+    else {
+        std::cout << ", PASSED!" << std::endl;
+    }
+
 
     return 0;
 }

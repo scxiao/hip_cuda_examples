@@ -17,59 +17,13 @@ __global__ void hip_hgemm_naive_f16(__half *A, __half *B, __half *C, int M, int 
 }
 
 
-/*
- * use 1 wave and the mfma4x4x16xf16 instruction to do the computation, tile_size is 64 x 64
- * block dim(32, 2)
- */
-__device__ void hgemm_4x4x16_fp16_device(__half *A, __half *B, __half *C, int M, int K, int N) {
-    using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
-    using floatx4 = __attribute__((__vector_size__(4 * sizeof(float)))) float;
-
-    float16x4 a, b;
-    floatx4 d[16] = {0};
-    for (int j = 0; j < 64; j += 4) {
-        a[0] = A[threadIdx.x * K + j];
-        a[1] = A[threadIdx.x * K + j + 1];
-        a[2] = A[threadIdx.x * K + j + 2];
-        a[3] = A[threadIdx.x * K + j + 3];
-
-        b[0] = B[threadIdx.x + j * N];
-        b[1] = B[threadIdx.x + (j + 1) * N];
-        b[2] = B[threadIdx.x + (j + 2) * N];
-        b[3] = B[threadIdx.x + (j + 3) * N];
-
-        d[0] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[0], 4, 0, 0);
-        d[1] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[1], 4, 1, 0);
-        d[2] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[2], 4, 2, 0);
-        d[3] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[3], 4, 3, 0);
-        d[4] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[4], 4, 4, 0);
-        d[5] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[5], 4, 5, 0);
-        d[6] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[6], 4, 6, 0);
-        d[7] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[7], 4, 7, 0);
-        d[8] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[8], 4, 8, 0);
-        d[9] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[9], 4, 9, 0);
-        d[10] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[10], 4, 10, 0);
-        d[11] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[11], 4, 11, 0);
-        d[12] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[12], 4, 12, 0);
-        d[13] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[13], 4, 13, 0);
-        d[14] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[14], 4, 14, 0);
-        d[15] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[15], 4, 15, 0);
-    }
-
-    for (int i = 0; i < 16; ++i) {
-        C[(4 * i + 0) * N + threadIdx.x] = d[i][0];
-        C[(4 * i + 1) * N + threadIdx.x] = d[i][1];
-        C[(4 * i + 2) * N + threadIdx.x] = d[i][2];
-        C[(4 * i + 3) * N + threadIdx.x] = d[i][3];
-    }
-}
 
 
 /*
  * use 1 wave and the mfma32x32x8xf16 instruction to do the computation, tile_size is 64 x 64
  * block dim(32, 2)
 */
-__device__ void hgemm_32x32x8_fp16_device(__half *sa, __half *sb, __half *sc, int sam, int sak, int sbn, int sbk, int scm, int scn) {
+__device__ void hgemm_32x32x8_fp16_device(__half *sa, __half *sb, float *sc, int sam, int sak, int sbn, int sbk, int scm, int scn) {
 #if __gfx90a__ || __gfx908__ || __gfx942__
     // using float16x8 = __attribute__((__vector_size__(8 * sizeof(__half)))) __half;
     using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
@@ -120,7 +74,8 @@ __device__ void hgemm_32x32x8_fp16_device(__half *sa, __half *sb, __half *sc, in
 
 __global__ void hip_hgemm_kernel_32x32x8f16(__half *A, __half *B, __half *C, int M, int N, int K) {
     const size_t size = SHARED_SIZE * (SHARED_SIZE + 1);
-    __shared__ __half sa[SIZE], sb[SIZE], sc[SIZE];
+    __shared__ __half sa[SIZE], sb[SIZE];
+    __shared__ float sc[SIZE];
         int sam = SHARED_SIZE;
         int sak = SHARED_SIZE + 1;
         int sbn = SHARED_SIZE;
@@ -144,35 +99,6 @@ __global__ void hip_hgemm_kernel_32x32x8f16(__half *A, __half *B, __half *C, int
         C[(blockIdx.x * 64 + j) * N + blockIdx.y * 64 + threadIdx.x] = sc[j * scn + threadIdx.x];
     }
 }
-
-bool hip_matrix_mul_fp16_464(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix<__half> &res, double& flops) {
-    size_t M, N, K1, K2, K;
-    in1.get_size(M, K1);
-    in2.get_size(K2, N);
-    assert(K1 == K2);
-    K = K1;
-    __half *da, *db, *dc;
-    hipMalloc((void**)&da, sizeof(__half) * M * K);
-    hipMalloc((void**)&db, sizeof(__half) * K * N);
-    hipMalloc((void**)&dc, sizeof(__half) * M * N);
-
-    hipMemcpy(da, in1.get_buffer(), sizeof(__half) * M * K, hipMemcpyHostToDevice);
-    hipMemcpy(db, in2.get_buffer(), sizeof(__half) * K * N, hipMemcpyHostToDevice);
-
-    dim3 grid(M/64, N/64);
-    dim3 block(64, 1);
-    hip_hgemm_kernel_32x32x8f16<<<grid, block>>>(da, db, dc, M, N, K);
-    hipError_t ret = hipGetLastError();
-    if (ret != hipSuccess) {
-        std::cout << "hip_matrix_mul_fp16_464, kernel launch error, code = " << ret << std::endl;
-        std::cout << "Error info: " << hipGetErrorString(ret) << std::endl;
-    }
-
-    hipMemcpy((void*)res.get_buffer(), dc, sizeof(__half) * M * N, hipMemcpyDeviceToHost);
-
-    return true;
-}
-
 
 bool hip_matrix_mul_f16_naive(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix<__half> &res, double& flops) {
     size_t M, N, K1, K2, K;
@@ -201,3 +127,136 @@ bool hip_matrix_mul_f16_naive(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatri
 
     return true;
 }
+
+bool hip_matrix_mul_32x32x8_fp16(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix<__half> &res, double& flops) {
+    size_t M, N, K1, K2, K;
+    in1.get_size(M, K1);
+    in2.get_size(K2, N);
+    assert(K1 == K2);
+    K = K1;
+    __half *da, *db, *dc;
+    hipMalloc((void**)&da, sizeof(__half) * M * K);
+    hipMalloc((void**)&db, sizeof(__half) * K * N);
+    hipMalloc((void**)&dc, sizeof(__half) * M * N);
+
+    hipMemcpy(da, in1.get_buffer(), sizeof(__half) * M * K, hipMemcpyHostToDevice);
+    hipMemcpy(db, in2.get_buffer(), sizeof(__half) * K * N, hipMemcpyHostToDevice);
+
+    dim3 grid(M/64, N/64);
+    dim3 block(64, 1);
+    hip_hgemm_kernel_32x32x8f16<<<grid, block>>>(da, db, dc, M, N, K);
+    hipError_t ret = hipGetLastError();
+    if (ret != hipSuccess) {
+        std::cout << "hip_matrix_mul_fp16_464, kernel launch error, code = " << ret << std::endl;
+        std::cout << "Error info: " << hipGetErrorString(ret) << std::endl;
+    }
+
+    hipMemcpy((void*)res.get_buffer(), dc, sizeof(__half) * M * N, hipMemcpyDeviceToHost);
+
+    return true;
+}
+
+/*
+ * use 1 wave and the mfma4x4x16xf16 instruction to do the computation, tile_size is 64 x 64
+ * block dim(64, 1)
+ */
+__device__ void hgemm_4x4x16_fp16_device(__half *sa, __half *sb, float *sc, int sam, int sak, int sbn, int sbk, int scm, int scn) {
+    using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
+    using floatx4 = __attribute__((__vector_size__(4 * sizeof(float)))) float;
+
+    float16x4 a, b;
+    floatx4 d[16] = {0};
+    for (int j = 0; j < 64; j += 4) {
+        a[0] = sa[threadIdx.x * sak + j];
+        a[1] = sa[threadIdx.x * sak + j + 1];
+        a[2] = sa[threadIdx.x * sak + j + 2];
+        a[3] = sa[threadIdx.x * sak + j + 3];
+
+        b[0] = sb[threadIdx.x * sbk + j];
+        b[1] = sb[threadIdx.x * sbk + j + 1];
+        b[2] = sb[threadIdx.x * sbk + j + 2];
+        b[3] = sb[threadIdx.x * sbk + j + 3];
+
+        d[0] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[0], 4, 0, 0);
+        d[1] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[1], 4, 1, 0);
+        d[2] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[2], 4, 2, 0);
+        d[3] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[3], 4, 3, 0);
+        d[4] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[4], 4, 4, 0);
+        d[5] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[5], 4, 5, 0);
+        d[6] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[6], 4, 6, 0);
+        d[7] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[7], 4, 7, 0);
+        d[8] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[8], 4, 8, 0);
+        d[9] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[9], 4, 9, 0);
+        d[10] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[10], 4, 10, 0);
+        d[11] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[11], 4, 11, 0);
+        d[12] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[12], 4, 12, 0);
+        d[13] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[13], 4, 13, 0);
+        d[14] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[14], 4, 14, 0);
+        d[15] = __builtin_amdgcn_mfma_f32_4x4x4f16(a, b, d[15], 4, 15, 0);
+    }
+
+    for (int i = 0; i < 16; ++i) {
+        sc[(4 * i + 0) * scn + threadIdx.x] += d[i][0];
+        sc[(4 * i + 1) * scn + threadIdx.x] += d[i][1];
+        sc[(4 * i + 2) * scn + threadIdx.x] += d[i][2];
+        sc[(4 * i + 3) * scn + threadIdx.x] += d[i][3];
+    }
+}
+
+__global__ void hip_hgemm_kernel_4x4x4_f16_464(__half *A, __half *B, __half *C, int M, int N, int K) {
+    const size_t size = SHARED_SIZE * (SHARED_SIZE + 1);
+    __shared__ __half sa[SIZE], sb[SIZE];
+    __shared__ float sc[SIZE];
+        int sam = SHARED_SIZE;
+        int sak = SHARED_SIZE + 1;
+        int sbn = SHARED_SIZE;
+        int sbk = SHARED_SIZE + 1;
+        int scm = SHARED_SIZE;
+        int scn = SHARED_SIZE + 1;
+    for (int j = 0; j < scn; ++j) {
+        sc[j * scn + threadIdx.x] = 0.0f;
+    }
+
+    for (int i = 0; i < K; i += 64) {
+        for (int j = 0; j < 64; ++j) {
+            sa[j * sak + threadIdx.x] = A[(blockIdx.x * 64 + j) * K + threadIdx.x + i];
+            sb[j * sbk + threadIdx.x] = B[(blockIdx.y * 64 + j) * K + threadIdx.x + i];
+        }
+
+        hgemm_4x4x16_fp16_device(sa, sb, sc, sam, sak, sbn, sbk, scm, scn);
+    }
+
+    for (int j = 0; j < 64; j++) {
+        C[(blockIdx.x * 64 + j) * N + blockIdx.y * 64 + threadIdx.x] = sc[j * scn + threadIdx.x];
+    }
+}
+
+
+bool hip_matrix_mul_4x4x4_fp16_464(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix<__half> &res, double& flops) {
+    size_t M, N, K1, K2, K;
+    in1.get_size(M, K1);
+    in2.get_size(K2, N);
+    assert(K1 == K2);
+    K = K1;
+    __half *da, *db, *dc;
+    hipMalloc((void**)&da, sizeof(__half) * M * K);
+    hipMalloc((void**)&db, sizeof(__half) * K * N);
+    hipMalloc((void**)&dc, sizeof(__half) * M * N);
+
+    hipMemcpy(da, in1.get_buffer(), sizeof(__half) * M * K, hipMemcpyHostToDevice);
+    hipMemcpy(db, in2.get_buffer(), sizeof(__half) * K * N, hipMemcpyHostToDevice);
+
+    dim3 grid(M/64, N/64);
+    dim3 block(64, 1);
+    hip_hgemm_kernel_4x4x4_f16_464<<<grid, block>>>(da, db, dc, M, N, K);
+    hipError_t ret = hipGetLastError();
+    if (ret != hipSuccess) {
+        std::cout << "hip_matrix_mul_4x4x4_fp16_464, kernel launch error, code = " << ret << std::endl;
+        std::cout << "Error info: " << hipGetErrorString(ret) << std::endl;
+    }
+
+    hipMemcpy((void*)res.get_buffer(), dc, sizeof(__half) * M * N, hipMemcpyDeviceToHost);
+
+    return true;
+}
+
