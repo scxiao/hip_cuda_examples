@@ -65,6 +65,7 @@ int main(int argc, char **argv) {
     }
 
     // naive implementation
+    res_matrix2.reset();
     timer.start();
     ret = hip_matrix_mul_int8_naive(matrix1, matrix2, res_matrix2, flops);
     if (ret == false) {
@@ -83,56 +84,25 @@ int main(int argc, char **argv) {
         std::cout << ", PASSED!" << std::endl;
     }
 
-    // timer.start();
-    // ret = hip_matrix_mul_32x32x8_fp16(matrix1_half, matrix2_half, matrix_res_half, flops);
-    // if (ret == false) {
-    //     cout << "hip_matrix_mul_32x32x8_fp16 failed, Matrix dimension mismatch!" << endl;
-    //     return 1;
-    // }
-    // timer.stop();
-    // kernel_time_us = timer.gettime_us(); 
-    // cout << "hip_matrix_mul_32x32x8_fp16 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
+    res_matrix2.reset();
+    timer.start();
+    ret = hip_matrix_mul_4x4x4_int8_464(matrix1, matrix2, res_matrix2, flops);
+    if (ret == false) {
+        cout << "hip_matrix_mul_4x4x4_int8_464 failed, Matrix dimension mismatch!" << endl;
+        return 1;
+    }
+    timer.stop();
+    kernel_time_us = timer.gettime_us(); 
+    cout << "hip_matrix_mul_4x4x4_int8_464 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
 
-    // for (int i = 0; i < m; ++i) {
-    //     for (int j = 0; j < n; ++j) {
-    //         matrix_res_float.get_elem(i, j) = matrix_res_half.get_elem(i, j);
-    //     }
-    // }
-
-    // ret = (res_matrix1 == matrix_res_float);
-    // if (ret == false) {
-    //     cout << "hip hip_matrix_mul_32x32x8_fp16 implementation failed." << endl;
-    //     return 1;
-    // }
-    // else {
-    //     std::cout << ", PASSED!" << std::endl;
-    // }
-
-
-    // timer.start();
-    // ret = hip_matrix_mul_4x4x4_fp16_464(matrix1_half, matrix2_half, matrix_res_half, flops);
-    // if (ret == false) {
-    //     cout << "hip_matrix_mul_4x4x4_fp16_464 failed, Matrix dimension mismatch!" << endl;
-    //     return 1;
-    // }
-    // timer.stop();
-    // kernel_time_us = timer.gettime_us(); 
-    // cout << "hip_matrix_mul_4x4x4_fp16_464 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
-
-    // for (int i = 0; i < m; ++i) {
-    //     for (int j = 0; j < n; ++j) {
-    //         matrix_res_float.get_elem(i, j) = matrix_res_half.get_elem(i, j);
-    //     }
-    // }
-
-    // ret = (res_matrix1 == matrix_res_float);
-    // if (ret == false) {
-    //     cout << "hip hip_matrix_mul_4x4x4_fp16_464 implementation failed." << endl;
-    //     return 1;
-    // }
-    // else {
-    //     std::cout << ", PASSED!" << std::endl;
-    // }
+    ret = (res_matrix1 == res_matrix2);
+    if (ret == false) {
+        cout << "hip hip_matrix_mul_4x4x4_int8_464 implementation failed." << endl;
+        return 1;
+    }
+    else {
+        std::cout << ", PASSED!" << std::endl;
+    }
 
 
     return 0;

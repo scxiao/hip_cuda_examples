@@ -8,7 +8,7 @@ find_package(hip REQUIRED)
 #add_definitions(-D__HIP_PLATFORM_AMD__)
 
 set (CMAKE_CXX_COMPILER /opt/rocm/bin/hipcc)
-set (CMAKE_CXX_STANDARD 14)
+set (CMAKE_CXX_STANDARD 17)
 #set (CMAKE_CXX_FLAGS  "-save-temps")
 #set (CMAKE_BUILD_TYPE Debug)
 set(CMAKE_VERBOSE_MAKEFILE on)

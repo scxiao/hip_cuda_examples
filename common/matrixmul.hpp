@@ -151,7 +151,7 @@ public:
         res_matrix.m_buffer = new T1[m_row * matrix.m_column];
         for (i = 0; i < m_row; ++i) {
             for (j = 0; j < matrix.m_column; ++j) {
-                T sum = 0;
+                T1 sum = 0;
                 for (k = 0; k < m_column; k++) {
                     sum += a_tmp_buffer[i * m_column + k] * b_tmp_buffer[k + j * matrix.m_row];
                 }
@@ -210,7 +210,7 @@ private:
         size_t i, j, k;
         for (i = start_row; i < end_row; ++i) {
             for (j = 0; j < res_matrix.m_column; ++j) {
-                T sum = 0;
+                T1 sum = 0;
                 for (k = 0; k < m_column; ++k) {
                     sum += get_elem(i, k) * matrix.get_elem(k, j);
                 }
@@ -339,7 +339,7 @@ bool CMatrix<T>::operator == (const CMatrix<T> &matrix) {
 }
 
 // template<>
-// bool CMatrix<int32_t>::operator == (const CMatrix<int32_t> &matrix) {
+// bool std::enable_if_t<std::is_integral_v<T>> CMatrix<int32_t>::operator == (const CMatrix<int32_t> &matrix) {
 //     if (m_row_major != matrix.m_row_major) {
 //         return false;
 //     } 
