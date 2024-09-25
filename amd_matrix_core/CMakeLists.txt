@@ -8,7 +8,7 @@ find_package(hip REQUIRED)
 #add_definitions(-D__HIP_PLATFORM_AMD__)
 
 set (CMAKE_CXX_COMPILER /opt/rocm/bin/hipcc)
-set (CMAKE_CXX_STANDARD 14)
+set (CMAKE_CXX_STANDARD 17)
 #set (CMAKE_CXX_FLAGS  "-save-temps")
 #set (CMAKE_BUILD_TYPE Debug)
 set(CMAKE_VERBOSE_MAKEFILE on)
@@ -31,6 +31,8 @@ set(
     test_examples
     test_mm_mul_fp64.cpp
     test_mm_mul_fp32.cpp
+    test_mm_mul_fp16.cpp
+    test_mm_mul_int8.cpp
     )
 
 add_library(test_util SHARED ${lib_SRC})

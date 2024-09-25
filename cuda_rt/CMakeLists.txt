@@ -26,10 +26,7 @@ set(lib_SRC
 message("lib_src = " ${lib_SRC})
 
 set(test_examples 
-    test_mm_mul.cpp 
-    test_vec_add.cpp 
-    test_reduction.cpp
-    test_layernorm_fuse.cpp)
+    test_mm_kernel_launch_event.cu)
 
 add_library(test_util SHARED ${lib_SRC})
 target_link_libraries(test_util cudart)
