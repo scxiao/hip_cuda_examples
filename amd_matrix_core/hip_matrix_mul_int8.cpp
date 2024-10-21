@@ -233,7 +233,6 @@ __global__ void hip_hgemm_kernel_4x4x4_int8_464(int8_t *A, int8_t *B, int32_t *C
     }
 }
 
-
 bool hip_matrix_mul_4x4x4_int8_464(CMatrix<int8_t> &in1, CMatrix<int8_t> &in2, CMatrix<int32_t> &res, double& flops) {
     size_t M, N, K1, K2, K;
     in1.get_size(M, K1);
@@ -263,3 +262,44 @@ bool hip_matrix_mul_4x4x4_int8_464(CMatrix<int8_t> &in1, CMatrix<int8_t> &in2, C
     return true;
 }
 
+// bypass LDS implementation, block_size (4, 64)
+__global__ void hip_hgemm_kernel_4x4x4_int8_464_bpl(int8_t *A, int8_t *B, int32_t *C, int M, int N, int K) {
+    using int8x8 = __attribute__((__vector_size__(8 * sizeof(int8_t)))) int8_t;
+    using int32x4 = __attribute__((__vector_size__(4 * sizeof(int32_t)))) int32_t;
+
+    int8x4 a8x4, b8x4;
+    int32x4 d[16] = {0};
+
+    for (int k1 = 0; k1 < K; k1 += 4) {
+        for (int k2 = 0; k2 < 4; ++k2) {
+            a8x4[k2] = A[(blockIdx.x * 64 + threadIdx.x) * K + k1 + k2];
+            b8x4[k2] = B[(blockIdx.y * 64 + threadIdx.x) * K + k1 + k2];
+        }
+
+        int a = (int)a8x4;
+        int b = (int)b8x4;
+        d[0] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[0], 4, 0, 0);
+        d[1] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[1], 4, 1, 0);
+        d[2] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[2], 4, 2, 0);
+        d[3] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[3], 4, 3, 0);
+        d[4] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[4], 4, 4, 0);
+        d[5] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[5], 4, 5, 0);
+        d[6] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[6], 4, 6, 0);
+        d[7] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[7], 4, 7, 0);
+        d[8] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[8], 4, 8, 0);
+        d[9] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[9], 4, 9, 0);
+        d[10] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[10], 4, 10, 0);
+        d[11] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[11], 4, 11, 0);
+        d[12] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[12], 4, 12, 0);
+        d[13] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[13], 4, 13, 0);
+        d[14] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[14], 4, 14, 0);
+        d[15] = __builtin_amdgcn_mfma_i32_4x4x4i8(a, b, d[15], 4, 15, 0);
+    }
+
+    for (int i = 0; i < 16; ++i) {
+        C[(blockIdx.x * 64 + i * 4 + 0) * N + blockIdx.y * 64 + threadIdx.x] = d[i][0];
+        C[(blockIdx.x * 64 + i * 4 + 1) * N + blockIdx.y * 64 + threadIdx.x] = d[i][1];
+        C[(blockIdx.x * 64 + i * 4 + 2) * N + blockIdx.y * 64 + threadIdx.x] = d[i][2];
+        C[(blockIdx.x * 64 + i * 4 + 3) * N + blockIdx.y * 64 + threadIdx.x] = d[i][3];
+    }
+}
