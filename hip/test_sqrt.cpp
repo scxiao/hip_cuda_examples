@@ -36,7 +36,6 @@ int main(int argc, char **argv) {
         hin[i] = __float2half(fin[i]);
         double d = (double)din[i];
         double h = (double)hin[i];
-        //std::cout << "d = " << d1 << ", f = " << fin1[i] << ", h = " << h1 << std::endl;
     }
 
     bool dret = hip_sqrt(din, dres);

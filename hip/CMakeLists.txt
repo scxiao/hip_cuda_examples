@@ -34,7 +34,8 @@ set(test_examples
     test_reduction.cpp 
     test_sqrt.cpp 
     test_layernorm.cpp
-    test_atomic_add.cpp)
+    test_atomic_add.cpp
+    test_cross_lane.cpp)
 
 add_library(test_util SHARED ${lib_SRC})
 #target_link_libraries(test_util ${HIP_LIBRARY})

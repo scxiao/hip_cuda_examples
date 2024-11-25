@@ -21,7 +21,7 @@ void init_vec(std::vector<T>& vec, std::size_t num)
     srand(1);
     for (size_t i = 0; i < num; ++i)
     {
-        float v = 1.0 * rand() / (1.0 * RAND_MAX);
+        float v = 10.0 * rand() / (1.0 * RAND_MAX);
         vec[i] = v;
     }
 }
