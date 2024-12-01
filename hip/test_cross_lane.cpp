@@ -3,6 +3,7 @@
 #include <hip/hip_fp16.h>
 #include <vector>
 #include <algorithm>
+#include <numeric>
 #include <init_vec.hpp>
 
 __global__ void reduce_lds(__half *g_idata, __half *g_odata) {
@@ -119,6 +120,40 @@ void test_ds_swizzle(const std::vector<int> &in, std::vector<int> &out) {
     hipMemcpy((void*)out.data(), out_d, out_size, hipMemcpyDeviceToHost);   
 }
 
+__global__ void kernel_dpp(int *g_idata, int *g_odata) {
+#if __gfx90a__ || __gfx908__ || __gfx942__
+    unsigned int tid = threadIdx.x;
+    unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    const int rowMask = 0xF;
+    const int bankMask = 0x1;
+    const int dppCtrl = 0x111;
+    const bool boundCtrl = true;
+
+    int v = g_idata[i];
+    v = __builtin_amdgcn_mov_dpp(v, dppCtrl, rowMask, bankMask, boundCtrl);
+    // v = v + out;
+
+    g_odata[i] = v;
+#endif
+}
+
+void test_dpp(const std::vector<int> &in, std::vector<int> &out) {
+    auto in_size = in.size() * sizeof(int);
+    int block_size = 64;
+    auto out_size = in_size;
+    out.resize(out_size / sizeof(int));
+
+    int *in_d, *out_d;
+    hipMalloc((void**)&in_d, in_size);
+    hipMalloc((void**)&out_d, out_size);
+
+    hipMemcpy(in_d, in.data(), in_size, hipMemcpyHostToDevice);
+    int block_num = in.size() / block_size;
+    kernel_dpp<<<block_num, block_size>>>(in_d, out_d);
+    hipMemcpy((void*)out.data(), out_d, out_size, hipMemcpyDeviceToHost);   
+}
+
 
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -134,10 +169,12 @@ int main(int argc, char **argv) {
     std::cout << "Element num: " << n << std::endl;
     srand(time(nullptr));
     std::vector<int> in_vec, out_vec;
-    init_vec(in_vec, n);
+    in_vec.resize(n);
+    std::iota(in_vec.begin(), in_vec.end(), 1);
 
     // test_ds_permute(in_vec, out_vec);
-    test_ds_swizzle(in_vec, out_vec);
+    // test_ds_swizzle(in_vec, out_vec);
+    test_dpp(in_vec, out_vec);
     for (int i = 0; i < in_vec.size(); ++i) {
         std::cout << "{" << in_vec[i] << ", " << out_vec[i] << "}\n";
     }
