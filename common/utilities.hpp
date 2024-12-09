@@ -1,6 +1,7 @@
 #ifndef __UTILITIES_HPP__
 #define __UTILITIES_HPP__
 
+#include <iostream>
 #include <vector>
 #if (defined(__NVCC__))
 #include <cuda_fp16.h>
@@ -36,6 +37,26 @@ bool compare(const std::vector<T>& vec1, std::vector<T>& vec2, float eps = 0.001
     }
 
     return ret;
+}
+
+template<class T>
+void print(std::ostream& os, const std::vector<T>& vec) {
+    char c = '{';
+    int i = 0;
+    for (auto &v : vec) {
+        os << c;
+        if ((i > 0) and (i % 16 == 0)) os << '\n';
+        i++;
+        os << v;
+        if (c == '{') c = ',';
+    }
+    os << '}';
+}
+
+template<class T>
+std::ostream& operator<< (std::ostream& os, const std::vector<T>& vec) {
+    print(os, vec);
+    return os;
 }
 
 #endif

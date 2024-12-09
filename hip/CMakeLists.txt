@@ -9,7 +9,7 @@ find_package(hip REQUIRED)
 
 set (CMAKE_CXX_COMPILER /opt/rocm/bin/hipcc)
 set (CMAKE_CXX_STANDARD 14)
-set (CMAKE_CXX_FLAGS  "-save-temps")
+# set (CMAKE_CXX_FLAGS  "-save-temps")
 #set (CMAKE_BUILD_TYPE Debug)
 set(CMAKE_VERBOSE_MAKEFILE on)
 
@@ -35,7 +35,8 @@ set(test_examples
     test_sqrt.cpp 
     test_layernorm.cpp
     test_atomic_add.cpp
-    test_cross_lane.cpp)
+    test_cross_lane.cpp
+    test_opt_atomic_add.cpp)
 
 add_library(test_util SHARED ${lib_SRC})
 #target_link_libraries(test_util ${HIP_LIBRARY})

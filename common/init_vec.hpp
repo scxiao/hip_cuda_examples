@@ -26,5 +26,15 @@ void init_vec(std::vector<T>& vec, std::size_t num)
     }
 }
 
+template<class T>
+void shuffle_vec(std::vector<T>& vec) {
+    int size = vec.size();
+    if (size <= 1) return;
+    for (int i = 0; i < size; ++i) {
+        int loc = rand() % (size - i);
+        std::swap(vec[i], vec[loc]);
+    }
+}
+
 #endif
 

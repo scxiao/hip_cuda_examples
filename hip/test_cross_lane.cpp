@@ -126,9 +126,9 @@ __global__ void kernel_dpp(int *g_idata, int *g_odata) {
     unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     const int rowMask = 0xF;
-    const int bankMask = 0x1;
-    const int dppCtrl = 0x111;
-    const bool boundCtrl = true;
+    const int bankMask = 0xF;
+    const int dppCtrl = 0x4E;
+    const bool boundCtrl = false;
 
     int v = g_idata[i];
     v = __builtin_amdgcn_mov_dpp(v, dppCtrl, rowMask, bankMask, boundCtrl);
