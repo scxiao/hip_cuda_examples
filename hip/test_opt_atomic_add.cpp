@@ -187,19 +187,20 @@ __global__ void kernelDynamicReduceSum(int *arr, int *idx, int elemNum) {
     int i = threadIdx.x;
     __shared__ int master[1024];
 
+    if (i >= elemNum) return;
+
     // find master thread
-    if (i < elemNum) {
-        if (i == 0 or idx[i] != idx[i - 1]) {
-            master[i] = 1;
-        }
-        else {
-            master[i] = 0;
-        }
+    if (i == 0 or idx[i] != idx[i - 1]) {
+        master[i] = 1;
+    }
+    else {
+        master[i] = 0;
     }
 
     // calculate the number of elements to be added by each master thread
-    int sum = arr[i];
+    int sum = 0;
     if (master[i]) {
+        sum = arr[i];
         int ii = i + 1;
         while (master[ii] == 0 and ii < elemNum) {
             sum += arr[ii];
@@ -207,9 +208,7 @@ __global__ void kernelDynamicReduceSum(int *arr, int *idx, int elemNum) {
     }
 
     __syncthreads();
-    if (i < elemNum) {
-        arr[i] = 0;
-    }
+    arr[i] = 0;
     
     if (master[i]) {
         arr[idx[i]] = sum;
@@ -254,7 +253,7 @@ int main(int argc, char **argv) {
     std::iota(vecVal.begin(), vecVal.end(), 0);
     std::iota(vecIdx.begin(), vecIdx.begin() + 4, 0);
     shuffle_vec(vecVal);
-    shuffle_vec(vecIdx);
+    init_vec(vecIdx, vecIdx.size());
 
     std::cout << "Before sorting:" << std::endl;
     std::cout << "val = \n" << vecVal << std::endl;
