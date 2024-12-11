@@ -147,32 +147,133 @@ void bitonicSort(const std::vector<int> &vec, std::vector<int> &sorted_vec) {
 }
 
 
+// GPU kernel for bitonic sort
+__global__ void kernelIdxBitonicSort(int *arr, int *idx, int elemNum) {
+    unsigned i, j, k, ij;
+    i = threadIdx.x;
+
+    for (k = 2; k <= elemNum; k <<= 1) {
+        for (j = k >> 1; j > 0; j = j >> 1) {
+            ij = i ^ j;
+            if (ij > i) {
+                if ((i & k) == 0) {
+                    if (idx[i] > idx[ij]) {
+                        int temp = arr[i];
+                        arr[i] = arr[ij];
+                        arr[ij] = temp;
+                        temp = idx[i];
+                        idx[i] = idx[ij];
+                        idx[ij] = temp;
+                    }
+                }
+                else {
+                    if (idx[i] < idx[ij]) {
+                        int temp = arr[i];
+                        arr[i] = arr[ij];
+                        arr[ij] = temp;
+                        temp = idx[i];
+                        idx[i] = idx[ij];
+                        idx[ij] = temp;
+                    }
+                }
+            }
+            __syncthreads();
+        }
+    }
+}
+
+
+__global__ void kernelDynamicReduceSum(int *arr, int *idx, int elemNum) {
+    int i = threadIdx.x;
+    __shared__ int master[1024];
+
+    // find master thread
+    if (i < elemNum) {
+        if (i == 0 or idx[i] != idx[i - 1]) {
+            master[i] = 1;
+        }
+        else {
+            master[i] = 0;
+        }
+    }
+
+    // calculate the number of elements to be added by each master thread
+    int sum = arr[i];
+    if (master[i]) {
+        int ii = i + 1;
+        while (master[ii] == 0 and ii < elemNum) {
+            sum += arr[ii];
+        }
+    }
+
+    __syncthreads();
+    if (i < elemNum) {
+        arr[i] = 0;
+    }
+    
+    if (master[i]) {
+        arr[idx[i]] = sum;
+    }
+}
+
+
+void idxBitonicSort(const std::vector<int> &vec, const std::vector<int>& idx, 
+                    std::vector<int> &sorted_vec, std::vector<int> &sorted_idx) {
+    int *vecd, *idxd;
+    int elemNum = vec.size();
+    unsigned int size = elemNum * sizeof(int);
+
+    int threadsPerBlock = 1024;
+    int blocksPerGrid = (elemNum + threadsPerBlock - 1) / threadsPerBlock;
+
+    hipMalloc((void**)&vecd, size);
+    hipMalloc((void**)&idxd, size);
+    hipMemcpy(vecd, vec.data(), size, hipMemcpyHostToDevice);
+    hipMemcpy(idxd, idx.data(), size, hipMemcpyHostToDevice);
+
+    // sort value according to index
+    kernelIdxBitonicSort<<<blocksPerGrid, threadsPerBlock>>>(vecd, idxd, elemNum);
+
+    // dynamic reduce_sum for each individual index value
+    kernelDynamicReduceSum<<<blocksPerGrid, threadsPerBlock>>>(vecd, idxd, elemNum);
+
+    sorted_vec.resize(vec.size());
+    sorted_idx.resize(idx.size());
+    hipMemcpy((void*)sorted_vec.data(), vecd, size, hipMemcpyDeviceToHost);
+    hipMemcpy((void*)sorted_idx.data(), idxd, size, hipMemcpyDeviceToHost);
+}
+
+
 int main(int argc, char **argv) {
     if (argc != 2) {
         std::cout << "Usage: " << argv[0] << " n" << std::endl;
         return 0;
     }
     int size = std::atoi(argv[1]);
-    std::vector<int> vec(size);
-    std::iota(vec.begin(), vec.end(), 0);
-    shuffle_vec(vec);
+    std::vector<int> vecVal(size), vecIdx(size);
+    std::iota(vecVal.begin(), vecVal.end(), 0);
+    std::iota(vecIdx.begin(), vecIdx.begin() + 4, 0);
+    shuffle_vec(vecVal);
+    shuffle_vec(vecIdx);
 
-    std::cout << "init_vec:" << std::endl;
-    std::cout << vec << std::endl;
+    std::cout << "Before sorting:" << std::endl;
+    std::cout << "val = \n" << vecVal << std::endl;
+    std::cout << "idx = \n" << vecIdx << std::endl;
 
     // refer result
-    std::vector<int> vec_gold(vec);
-    mergeSort(vec_gold);
+    // std::vector<int> vec_gold(vec);
+    // mergeSort(vec_gold);
 
-    std::cout << "ref_result:" << std::endl;
-    std::cout << vec_gold << std::endl;
+    // std::cout << "ref_result:" << std::endl;
+    // std::cout << vec_gold << std::endl;
 
     // GPU bitonic sort
-    std::vector<int> vec_gpu;
-    bitonicSort(vec, vec_gpu);
+    std::vector<int> vecVal_gpu, vecIdx_gpu;
+    idxBitonicSort(vecVal, vecIdx, vecVal_gpu, vecIdx_gpu);
 
-    std::cout << "gpu_result:" << std::endl;
-    std::cout << vec_gpu << std::endl;
+    std::cout << "GPU sorted results:" << std::endl;
+    std::cout << "val = \n" << vecVal_gpu << std::endl;
+    std::cout << "idx = \n" << vecIdx_gpu << std::endl;
 
     return 0;
 }
