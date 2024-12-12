@@ -36,7 +36,8 @@ set(test_examples
     test_layernorm.cpp
     test_atomic_add.cpp
     test_cross_lane.cpp
-    test_opt_atomic_add.cpp)
+    test_opt_atomic_add.cpp
+    test_prefix_sum.cpp)
 
 add_library(test_util SHARED ${lib_SRC})
 #target_link_libraries(test_util ${HIP_LIBRARY})

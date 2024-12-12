@@ -240,6 +240,8 @@ void idxBitonicSort(const std::vector<int> &vec, const std::vector<int>& idx,
     sorted_idx.resize(idx.size());
     hipMemcpy((void*)sorted_vec.data(), vecd, size, hipMemcpyDeviceToHost);
     hipMemcpy((void*)sorted_idx.data(), idxd, size, hipMemcpyDeviceToHost);
+    hipFree(vecd);
+    hipFree(idxd);
 }
 
 
