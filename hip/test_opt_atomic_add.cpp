@@ -9,9 +9,10 @@
 
 using namespace std;
 
-void reduce_write(const vector<float>& vals, 
+template<class T>
+void reduce_write(const vector<T>& vals, 
                   const vector<int>& indices,
-                  vector<float> &outs) {
+                  vector<T> &outs) {
     assert(vals.size() == indices.size());
     for (int i = 0; i < vals.size(); ++i) {
         outs[indices[i]] += vals[i];
@@ -183,42 +184,45 @@ __global__ void kernelIdxBitonicSort(int *arr, int *idx, int elemNum) {
 }
 
 
-__global__ void kernelDynamicReduceSum(int *arr, int *idx, int elemNum) {
-    int i = threadIdx.x;
-    __shared__ int master[1024];
+__global__ void kernelDynamicPrefixSum(int *arr_in, int *idx, int *arr_out, int elemNum) {
+    int tid = threadIdx.x;
+    int size = blockDim.x;
+    extern __shared__ float tmp[];
+    int *idxb = ((int*)tmp) + 2 * size;
+    int bout = 0, bin = 1;
 
-    if (i >= elemNum) return;
+    tmp[bout * size + tid] = (tid < elemNum) ? arr_in[tid]: 0;
+    idxb[tid] = (tid < elemNum) ? idx[tid] : -1;
+    __syncthreads();
+    for (int offset = 1; offset < elemNum; offset *= 2) {
+        bout = 1 - bout;
+        bin = 1 - bin;
+        if (tid >= offset and idx[tid - offset] == idx[tid]) {
+            tmp[bout * size + tid] = tmp[bin * size + tid] + tmp[bin * size + tid - offset];
+        }
+        else {
+            tmp[bout * size + tid] = tmp[bin * size + tid];
+        }
+        __syncthreads();
+    }
 
-    // find master thread
-    if (i == 0 or idx[i] != idx[i - 1]) {
-        master[i] = 1;
+    __shared__ bool master[1024];
+    if ((tid < elemNum - 1 and idx[tid] != idx[tid + 1]) or (tid == elemNum - 1)) {
+        master[tid] = true;
     }
     else {
-        master[i] = 0;
+        master[tid] = false;
     }
 
-    // calculate the number of elements to be added by each master thread
-    int sum = 0;
-    if (master[i]) {
-        sum = arr[i];
-        int ii = i + 1;
-        while (master[ii] == 0 and ii < elemNum) {
-            sum += arr[ii];
-        }
-    }
-
-    __syncthreads();
-    arr[i] = 0;
-    
-    if (master[i]) {
-        arr[idx[i]] = sum;
+    if (master[tid]) {
+        arr_out[idx[tid]] = tmp[bout * size + tid];
     }
 }
 
 
-void idxBitonicSort(const std::vector<int> &vec, const std::vector<int>& idx, 
-                    std::vector<int> &sorted_vec, std::vector<int> &sorted_idx) {
-    int *vecd, *idxd;
+void testDynamicPrefixSum(const std::vector<int> &vec, const std::vector<int>& idx, 
+                    std::vector<int> &vec_out, std::vector<int> &sorted_idx) {
+    int *vecd, *idxd, *vecd_out;
     int elemNum = vec.size();
     unsigned int size = elemNum * sizeof(int);
 
@@ -226,7 +230,9 @@ void idxBitonicSort(const std::vector<int> &vec, const std::vector<int>& idx,
     int blocksPerGrid = (elemNum + threadsPerBlock - 1) / threadsPerBlock;
 
     hipMalloc((void**)&vecd, size);
+    hipMalloc((void**)&vecd_out, size);
     hipMalloc((void**)&idxd, size);
+    hipMemset(vecd_out, 0, size);
     hipMemcpy(vecd, vec.data(), size, hipMemcpyHostToDevice);
     hipMemcpy(idxd, idx.data(), size, hipMemcpyHostToDevice);
 
@@ -234,11 +240,13 @@ void idxBitonicSort(const std::vector<int> &vec, const std::vector<int>& idx,
     kernelIdxBitonicSort<<<blocksPerGrid, threadsPerBlock>>>(vecd, idxd, elemNum);
 
     // dynamic reduce_sum for each individual index value
-    kernelDynamicReduceSum<<<blocksPerGrid, threadsPerBlock>>>(vecd, idxd, elemNum);
+    std::size_t sharedSize = 3 * threadsPerBlock * sizeof(float);
+    kernelDynamicPrefixSum<<<blocksPerGrid, threadsPerBlock, sharedSize>>>(vecd, idxd, vecd_out, elemNum);
 
-    sorted_vec.resize(vec.size());
+    vec_out.resize(vec.size());
     sorted_idx.resize(idx.size());
-    hipMemcpy((void*)sorted_vec.data(), vecd, size, hipMemcpyDeviceToHost);
+    
+    hipMemcpy((void*)vec_out.data(), vecd_out, size, hipMemcpyDeviceToHost);
     hipMemcpy((void*)sorted_idx.data(), idxd, size, hipMemcpyDeviceToHost);
     hipFree(vecd);
     hipFree(idxd);
@@ -262,15 +270,13 @@ int main(int argc, char **argv) {
     std::cout << "idx = \n" << vecIdx << std::endl;
 
     // refer result
-    // std::vector<int> vec_gold(vec);
-    // mergeSort(vec_gold);
-
-    // std::cout << "ref_result:" << std::endl;
-    // std::cout << vec_gold << std::endl;
+    std::vector<int> golden_out(vecVal.size(), 0);
+    reduce_write(vecVal, vecIdx, golden_out);
+    std::cout << "\ngolden = \n" << golden_out << std::endl;
 
     // GPU bitonic sort
     std::vector<int> vecVal_gpu, vecIdx_gpu;
-    idxBitonicSort(vecVal, vecIdx, vecVal_gpu, vecIdx_gpu);
+    testDynamicPrefixSum(vecVal, vecIdx, vecVal_gpu, vecIdx_gpu);
 
     std::cout << "GPU sorted results:" << std::endl;
     std::cout << "val = \n" << vecVal_gpu << std::endl;

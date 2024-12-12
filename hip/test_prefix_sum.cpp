@@ -50,11 +50,22 @@ void testPrefixSum(const std::vector<float> &vec, std::vector<float> &vec_out) {
     hipFree(vecd_out);
 }
 
+
+void reduce_write(const std::vector<float>& vals, 
+                  const std::vector<int>& indices,
+                  std::vector<float> &outs) {
+    assert(vals.size() == indices.size());
+    for (int i = 0; i < vals.size(); ++i) {
+        outs[indices[i]] += vals[i];
+    }
+}
+
+
 __global__ void kernelDynamicPrefixSum(float *arr_in, int *idx, float *arr_out, int elemNum) {
     int tid = threadIdx.x;
     int size = blockDim.x;
     extern __shared__ float tmp[];
-    int *idxb = tmp + 2 * size;
+    int *idxb = ((int*)tmp) + 2 * size;
     int bout = 0, bin = 1;
 
     tmp[bout * size + tid] = (tid < elemNum) ? arr_in[tid]: 0;
@@ -72,8 +83,8 @@ __global__ void kernelDynamicPrefixSum(float *arr_in, int *idx, float *arr_out, 
         __syncthreads();
     }
 
-    extern __shared__ bool master[1024];
-    if (tid < elemNum - 1 and idx[tid] != idx[tid + 1]) {
+    __shared__ bool master[1024];
+    if ((tid < elemNum - 1 and idx[tid] != idx[tid + 1]) or (tid == elemNum - 1)) {
         master[tid] = true;
     }
     else {
@@ -81,7 +92,7 @@ __global__ void kernelDynamicPrefixSum(float *arr_in, int *idx, float *arr_out, 
     }
 
     if (master[tid]) {
-        arr[idx[tid]] = tmp[bout * size + tid];
+        arr_out[idx[tid]] = tmp[bout * size + tid];
     }
 }
 
@@ -98,12 +109,12 @@ void testDynamicPrefixSum(const std::vector<float> &vec, const std::vector<int> 
 
     hipMalloc((void**)&vecd, size);
     hipMalloc((void**)&vecd_out, size);
-    hipMalloc((void**)&idxd, idx_size);
+    hipMalloc((void**)&idxd, idxSize);
     hipMemset(vecd_out, 0, size);
     hipMemcpy(vecd, vec.data(), size, hipMemcpyHostToDevice);
     hipMemcpy(idxd, idx.data(), idxSize, hipMemcpyHostToDevice);
     std::size_t sharedSize = 3 * threadsPerBlock * sizeof(float);
-    kernelPrefixSum<<<blocksPerGrid, threadsPerBlock, sharedSize>>>(vecd, idxd, vecd_out, elemNum);
+    kernelDynamicPrefixSum<<<blocksPerGrid, threadsPerBlock, sharedSize>>>(vecd, idxd, vecd_out, elemNum);
     hipMemcpy((void*)vec_out.data(), vecd_out, size, hipMemcpyDeviceToHost);
     hipFree(vecd);
     hipFree(vecd_out);
@@ -124,15 +135,20 @@ int main(int argc, char **argv) {
     std::cout << "Before sorting:" << std::endl;
     std::cout << "val = \n" << vecVal << std::endl;
 
+    std::sort(vecIdx.begin(), vecIdx.end());
+    std::cout << "sorted_idx =" << std::endl;
+    std::cout << vecIdx << std::endl;
+
+    // golden output
+    std::vector<float> golden_out(vecVal.size(), 0);
+    reduce_write(vecVal, vecIdx, golden_out);
+    std::cout << "\ngolden = \n" << golden_out << std::endl;
+
     // GPU bitonic sort
     std::vector<float> vecSum;
-    testPrefixSum(vecVal, vecSum);
+    testDynamicPrefixSum(vecVal, vecIdx, vecSum);
 
-    // gold sum
-    float goldSum = std::accumulate(vecVal.begin(), vecVal.end(), 0.0f);
-    std::cout << "goldSum = " << goldSum << std::endl;
-
-    std::cout << "gpuPrefixSum:" << std::endl;
+    std::cout << "\ngpuPrefixSum:" << std::endl;
     std::cout << "val = \n" << vecSum << std::endl;
 
     return 0;
