@@ -9,7 +9,7 @@
 
 
 template <typename T>
-__device__ void atomicAddNoRetGFX9(T *address, T value)
+__device__ void atomicAddNoRetGFX9(T *addr_in, T *addr_out, T value)
 {
   auto readfirstlane = [](auto arg) -> auto
   {
@@ -64,8 +64,8 @@ __device__ void atomicAddNoRetGFX9(T *address, T value)
   // group lanes by address
   while (!done)
   {
-    auto chosen = readfirstlane(address);
-    bool done_ = chosen == address;
+    auto chosen = readfirstlane(addr_in);
+    bool done_ = chosen == addr_in;
     uint64_t mask = __ballot(done_);
     start = base;
     count = __popcll(mask);
@@ -81,7 +81,8 @@ __device__ void atomicAddNoRetGFX9(T *address, T value)
 
   // coalesce
   uint32_t index_times_four = index * 4;
-  address = (T*) permute(index_times_four, (T __attribute__((address_space(1)))*) address);
+  // addr_in = (T*) permute(index_times_four, (T __attribute__((address_space(1)))*) addr_in);
+  addr_out = (T*) permute(index_times_four, (T __attribute__((address_space(1)))*) addr_out);
   value = permute(index_times_four, value);
 
   uint32_t packed = permute(index_times_four, leader | index_times_four | (count << 8));
@@ -107,13 +108,13 @@ __device__ void atomicAddNoRetGFX9(T *address, T value)
   // apply
   if (leader)
   {
-     atomicAdd(address, acc);
+     atomicAdd(addr_out, acc);
   }
 }
 
-__global__ void kernelPrefixSumImpl(float *arr, int *idx, int elemNum) {
+__global__ void kernelPrefixSumImpl(float *arr_in, int *idx, float *arr_out, int elemNum) {
     int tid = threadIdx.x;
-    atomicAddNoRetGFX9(arr + idx[tid], arr[tid]);
+    atomicAddNoRetGFX9(arr_in + idx[tid], arr_out + idx[tid], arr_in[tid]);
 }
 
 void testPrefixSumImpl(const std::vector<float> &vec, const std::vector<int> &idx, std::vector<float> &vec_out) {
@@ -134,8 +135,8 @@ void testPrefixSumImpl(const std::vector<float> &vec, const std::vector<int> &id
     hipMemcpy(vecd, vec.data(), size, hipMemcpyHostToDevice);
     hipMemcpy(idxd, idx.data(), idxSize, hipMemcpyHostToDevice);
     // std::size_t sharedSize = 3 * threadsPerBlock * sizeof(float);
-    kernelPrefixSumImpl<<<blocksPerGrid, threadsPerBlock>>>(vecd, idxd, elemNum);
-    hipMemcpy((void*)vec_out.data(), vecd, size, hipMemcpyDeviceToHost);
+    kernelPrefixSumImpl<<<blocksPerGrid, threadsPerBlock>>>(vecd, idxd, vecd_out, elemNum);
+    hipMemcpy((void*)vec_out.data(), vecd_out, size, hipMemcpyDeviceToHost);
     hipFree(vecd);
     hipFree(vecd_out);
 }
