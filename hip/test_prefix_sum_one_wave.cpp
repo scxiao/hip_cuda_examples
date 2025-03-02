@@ -210,41 +210,87 @@ void testDynamicPrefixSum(const std::vector<float> &vec, const std::vector<int> 
     hipFree(vecd_out);
 }
 
+template <typename T>
+__device__ T ReadFirstLane(T val)
+{
+  auto readfirstlane = [](auto arg) -> auto
+  {
+    constexpr size_t count = (sizeof(arg) + 3) / 4;
+    union
+    {
+      decltype(arg) v;
+      int32_t i[count];
+    } u{arg};
+    for (size_t i = 0; i < count; i++)
+    {
+      u.i[i] = __builtin_amdgcn_readfirstlane(u.i[i]);
+    }
+    return u.v;
+  };
+
+  return readfirstlane(val);
+}
+
+__global__ void kernel_first_active_tid(int *val) {
+  int tid = threadIdx.x;
+  int v = 0;
+  if (tid > 10) {
+    v = ReadFirstLane(tid);
+  }
+
+  val[tid] = v;
+}
+
+
+void testReadFirstActiveTid() {
+  int *out;
+  size_t wave_size = 64;
+  hipMalloc((void **)&out, wave_size * sizeof(int));
+  kernel_first_active_tid<<<1, 64>>>(out);
+
+  std::vector<int> output(wave_size);
+  hipMemcpy((void*)output.data(), out, wave_size * sizeof(int), hipMemcpyDeviceToHost);
+
+  std::cout << "output = " << output << std::endl;
+}
+
 
 int main(int argc, char **argv) {
     if (argc != 2) {
         std::cout << "Usage: " << argv[0] << " n" << std::endl;
         return 0;
     }
-    int size = std::atoi(argv[1]);
-    std::vector<float> vecVal(size);
-    std::vector<int> vecIdx(size);
-    init_vec(vecVal, vecVal.size());
-    init_vec(vecIdx, vecIdx.size());
+    // int size = std::atoi(argv[1]);
+    // std::vector<float> vecVal(size);
+    // std::vector<int> vecIdx(size);
+    // init_vec(vecVal, vecVal.size());
+    // init_vec(vecIdx, vecIdx.size());
 
-    std::cout << "Before sorting:" << std::endl;
-    std::cout << "val = \n" << vecVal << std::endl;
+    // std::cout << "Before sorting:" << std::endl;
+    // std::cout << "val = \n" << vecVal << std::endl;
 
-    std::sort(vecIdx.begin(), vecIdx.end());
-    std::cout << "sorted_idx =" << std::endl;
-    std::cout << vecIdx << std::endl;
+    // std::sort(vecIdx.begin(), vecIdx.end());
+    // std::cout << "sorted_idx =" << std::endl;
+    // std::cout << vecIdx << std::endl;
 
-    // golden output
-    std::vector<float> golden_out(vecVal.size(), 0);
-    reduce_write(vecVal, vecIdx, golden_out);
-    std::cout << "\ngolden = \n" << golden_out << std::endl;
+    // // golden output
+    // std::vector<float> golden_out(vecVal.size(), 0);
+    // reduce_write(vecVal, vecIdx, golden_out);
+    // std::cout << "\ngolden = \n" << golden_out << std::endl;
 
-    // GPU bitonic sort
-    std::cout << "\ngpuPrefixSum:" << std::endl;
-    std::vector<float> vecSum;
-    testDynamicPrefixSum(vecVal, vecIdx, vecSum);
-    std::cout << vecSum << std::endl;
+    // // GPU bitonic sort
+    // std::cout << "\ngpuPrefixSum:" << std::endl;
+    // std::vector<float> vecSum;
+    // testDynamicPrefixSum(vecVal, vecIdx, vecSum);
+    // std::cout << vecSum << std::endl;
 
-    // GPU bitonic sort
-    std::cout << "\ngpuPrefixSumImpl:" << std::endl;
-    std::vector<float> vecSumImpl;
-    testPrefixSumImpl(vecVal, vecIdx, vecSumImpl);
-    std::cout << vecSumImpl << std::endl;
+    // // GPU bitonic sort
+    // std::cout << "\ngpuPrefixSumImpl:" << std::endl;
+    // std::vector<float> vecSumImpl;
+    // testPrefixSumImpl(vecVal, vecIdx, vecSumImpl);
+    // std::cout << vecSumImpl << std::endl;
+
+    testReadFirstActiveTid();
 
     return 0;
 }

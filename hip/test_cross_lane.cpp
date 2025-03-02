@@ -104,6 +104,7 @@ __global__ void kernel_ds_swizzle(int *g_idata, int *g_odata) {
 #endif
 }
 
+
 void test_ds_swizzle(const std::vector<int> &in, std::vector<int> &out) {
     auto in_size = in.size() * sizeof(int);
     int block_size = 64;
@@ -127,7 +128,9 @@ __global__ void kernel_dpp(int *g_idata, int *g_odata) {
 
     const int rowMask = 0xF;
     const int bankMask = 0xF;
-    const int dppCtrl = 0x4E;
+    // const int dppCtrl = 0x4E;
+    // const int dppCtrl = 0x102; // leftshift
+    const int dppCtrl = 0x111; // rightshift
     const bool boundCtrl = false;
 
     int v = g_idata[i];
@@ -154,6 +157,45 @@ void test_dpp(const std::vector<int> &in, std::vector<int> &out) {
     hipMemcpy((void*)out.data(), out_d, out_size, hipMemcpyDeviceToHost);   
 }
 
+template<int rowMask, int bankMask, int dppCtrl, bool boundCtrl>
+__device__ int dpp_primitive(int v) {
+    return __builtin_amdgcn_update_dpp(0, v, dppCtrl, rowMask, bankMask, boundCtrl);
+}
+
+__global__ void kernel_prefix_sum(int *input, int *output) {
+    int tid = threadIdx.x;
+    int v0 = input[tid];
+    int v1 = v0;
+    v1 += dpp_primitive<0xF, 0xF, 0x111, false>(v0);
+    v1 += dpp_primitive<0xF, 0xF, 0x112, false>(v0);
+    v1 += dpp_primitive<0xF, 0xF, 0x113, false>(v0);
+    v1 += dpp_primitive<0xF, 0xE, 0x114, true>(v1);
+    v1 += dpp_primitive<0xF, 0xC, 0x118, true>(v1);
+    v1 += dpp_primitive<0xA, 0xF, 0x142, true>(v1);
+    v1 += dpp_primitive<0xC, 0xF, 0x143, true>(v1);
+
+    output[tid] = v1;
+    output[tid + 64] = v1;
+}
+
+
+void test_prefix_sum(const std::vector<int> &in, std::vector<int> &out) {
+    auto in_size = in.size() * sizeof(int);
+    int block_size = 64;
+    auto out_size = in_size * 2;
+    out.resize(out_size / sizeof(int));
+
+    int *in_d, *out_d;
+    hipMalloc((void**)&in_d, in_size);
+    hipMalloc((void**)&out_d, out_size);
+
+    hipMemcpy(in_d, in.data(), in_size, hipMemcpyHostToDevice);
+    int block_num = in.size() / block_size;
+    kernel_prefix_sum<<<block_num, block_size>>>(in_d, out_d);
+    hipMemcpy((void*)out.data(), out_d, out_size, hipMemcpyDeviceToHost);   
+}
+
+
 
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -169,14 +211,15 @@ int main(int argc, char **argv) {
     std::cout << "Element num: " << n << std::endl;
     srand(time(nullptr));
     std::vector<int> in_vec, out_vec;
-    in_vec.resize(n);
-    std::iota(in_vec.begin(), in_vec.end(), 1);
+    in_vec.resize(n, 1);
+    // std::iota(in_vec.begin(), in_vec.end(), 1);
 
     // test_ds_permute(in_vec, out_vec);
     // test_ds_swizzle(in_vec, out_vec);
-    test_dpp(in_vec, out_vec);
+    // test_dpp(in_vec, out_vec);
+    test_prefix_sum(in_vec, out_vec);
     for (int i = 0; i < in_vec.size(); ++i) {
-        std::cout << "{" << in_vec[i] << ", " << out_vec[i] << "}\n";
+        std::cout << "{" << in_vec[i] << ", " << out_vec[i] << ", " << out_vec[i + 64] << "}\n";
     }
 
     return 0;
