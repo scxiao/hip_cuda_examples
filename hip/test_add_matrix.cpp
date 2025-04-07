@@ -13,7 +13,7 @@ using namespace std;
 
 #define BLOCK_M 64
 #define BLOCK_N 64
-#define PADDING 2
+#define PADDING 4
 
 
 template<class T>
