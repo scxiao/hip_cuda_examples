@@ -98,10 +98,6 @@ __device__ void sparse_gemm_32x32x16_fp16_device(__half *sa, int *sparse_idx, __
 
 
 __global__ void hip_sparse_hgemm_kernel_32x32x16f16(__half *A, int *idx, __half *B, float *C, int M, int Ka, int N, int Kb) {
-    // const size_t size = SHARED_SIZE * (SHARED_SIZE + 1);
-    // __shared__ __half sa[SIZE], sb[SIZE];
-    // __shared__ float sc[SIZE * (SIZE + 1)];
-
     sparse_gemm_32x32x16_fp16_device(A, idx, B, C, M, Ka, N, Kb, M, N);
 }
 
