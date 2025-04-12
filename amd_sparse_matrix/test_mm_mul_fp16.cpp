@@ -19,11 +19,9 @@ CMatrix<float> sparseMatMul(CMatrix<__half> &a, CMatrix<int> &idx, CMatrix<__hal
             float sum = 0.0f;
             for (int k = 0; k < bk; k += 4) {
                 int ka = k / 2;
-                int tmp0 = (3 - idx.get_elem(i, ka + 1));
-                int idx0 = k + tmp0;
+                int idx0 = k + idx.get_elem(i, ka);
                 sum += (float)a.get_elem(i, ka) * (float)b.get_elem(idx0, j);
-                int tmp1 = (3 - idx.get_elem(i, ka));
-                int idx1 = k + tmp1;
+                int idx1 = k + idx.get_elem(i, ka + 1);
                 sum += (float)a.get_elem(i, ka + 1) * (float)b.get_elem(idx1, j);
             }
 

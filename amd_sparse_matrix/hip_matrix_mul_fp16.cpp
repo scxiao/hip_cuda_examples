@@ -14,7 +14,7 @@ __global__ void hip_sparse_hgemm_naive_f16(__half *A, int *sparse_idx, __half *B
     for (int k = 0; k < Kb; k += 4) {
         int a_id = k / 2;
         for (int j = 0; j < 2; j++) {
-            sum += (float)(A[id_x * Ka + a_id + j] * B[id_y * Kb + k + (3 - sparse_idx[id_x * Ka + a_id + 1 - j])]);
+            sum += (float)(A[id_x * Ka + a_id + j] * B[id_y * Kb + k + sparse_idx[id_x * Ka + a_id + j]]);
         }
     }
     C[id_x * N + id_y] = sum;
@@ -110,18 +110,17 @@ std::vector<int> compressSparseIndex(CMatrix<int> &sparse_indices) {
     std::size_t rowNum, colNum;
     sparse_indices.get_size(rowNum, colNum);
     assert(rowNum % 4 == 0);
-    for (int r = 0; r < rowNum; r += 4) {
-        for (int c = 0; c < colNum; c++) {
+    for (int c = 0; c < colNum; c += 4) {
+        for (int r = 0; r < rowNum; ++r) {
             int v = 0;
             int idx = sparse_indices.get_elem(r, c);
             v |= (idx & 0x3);
-            idx = sparse_indices.get_elem(r + 1, c);
+            idx = sparse_indices.get_elem(r, c + 1);
             v |= ((idx & 0x3) << 2);
-            idx = sparse_indices.get_elem(r + 2, c);
+            idx = sparse_indices.get_elem(r, c + 2);
             v |= ((idx & 0x3) << 4);
-            idx = sparse_indices.get_elem(r + 3, c);
+            idx = sparse_indices.get_elem(r, c + 3);
             v |= ((idx & 0x3) << 6);
-            std::cout << std::hex << "v = " << v << std::endl;
             result.push_back(v);
         }
     }
