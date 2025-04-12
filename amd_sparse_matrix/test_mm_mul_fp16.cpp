@@ -69,8 +69,8 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < m; ++i) {
         for (int j = 0; j < k/2; j += 2) {
-            matrix_idx.get_elem(i, j) = 0;
-            matrix_idx.get_elem(i, j + 1) = 2;
+            matrix_idx.get_elem(i, j) = (i + j) % 3;
+            matrix_idx.get_elem(i, j + 1) = (i + j) % 3 + 1;
         }
     }
 

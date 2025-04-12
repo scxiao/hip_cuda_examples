@@ -50,6 +50,8 @@ bool hip_sparse_matrix_mul_f16_naive(CMatrix<__half> &in1, CMatrix<int>& idx, CM
     return true;
 }
 
+const int cabid = 2;
+const int ccbsz = 0;
 /*
  * use 1 wave and the mfma32x32x8xf16 instruction to do the computation, tile_size is 64 x 64
  * block dim(32, 2)
@@ -78,7 +80,7 @@ __device__ void sparse_gemm_32x32x16_fp16_device(__half *sa, int *sparse_idx, __
     for (int i = 0; i < 8; ++i) {
         b[i] = sb[tidx * bk + i + 8 * tidy];
     }
-    d = __builtin_amdgcn_smfmac_f32_32x32x16_f16(a, b, d, idx, 0, 0);
+    d = __builtin_amdgcn_smfmac_f32_32x32x16_f16(a, b, d, idx, ccbsz, cabid);
 
     for (int j = 0; j < 16; ++j) {
         int j1 = j % 4;
@@ -101,22 +103,23 @@ __global__ void hip_sparse_hgemm_kernel_32x32x16f16(__half *A, int *idx, __half 
     sparse_gemm_32x32x16_fp16_device(A, idx, B, C, M, Ka, N, Kb, M, N);
 }
 
-std::vector<int> compressSparseIndex(CMatrix<int> &sparse_indices) {
+std::vector<int> compressSparseIndex(CMatrix<int> &sparse_indices, const int abid = 0) {
     std::vector<int> result;
     std::size_t rowNum, colNum;
     sparse_indices.get_size(rowNum, colNum);
     assert(rowNum % 4 == 0);
+    int soff = abid * 8;
     for (int c = 0; c < colNum; c += 4) {
         for (int r = 0; r < rowNum; ++r) {
             int v = 0;
             int idx = sparse_indices.get_elem(r, c);
-            v |= (idx & 0x3);
+            v |= ((idx & 0x3) << soff);
             idx = sparse_indices.get_elem(r, c + 1);
-            v |= ((idx & 0x3) << 2);
+            v |= ((idx & 0x3) << (soff + 2));
             idx = sparse_indices.get_elem(r, c + 2);
-            v |= ((idx & 0x3) << 4);
+            v |= ((idx & 0x3) << (soff + 4));
             idx = sparse_indices.get_elem(r, c + 3);
-            v |= ((idx & 0x3) << 6);
+            v |= ((idx & 0x3) << (soff + 6));
             result.push_back(v);
         }
     }
@@ -133,7 +136,7 @@ bool hip_sparse_matrix_mul_32x32x16_fp16(CMatrix<__half> &in1, CMatrix<int>& idx
     float *dc;
 
     // comparess index input
-    std::vector<int> compressed_idx = compressSparseIndex(idx);
+    std::vector<int> compressed_idx = compressSparseIndex(idx, cabid);
     hipMalloc((void**)&da, sizeof(__half) * M * K1);
     hipMalloc((void**)&da_i, sizeof(int) * compressed_idx.size());
     hipMalloc((void**)&db, sizeof(__half) * K2 * N);
