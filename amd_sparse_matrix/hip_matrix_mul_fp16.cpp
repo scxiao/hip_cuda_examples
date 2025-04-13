@@ -53,8 +53,8 @@ bool hip_sparse_matrix_mul_f16_naive(CMatrix<__half> &in1, CMatrix<int>& idx, CM
 const int cabid = 2;
 const int ccbsz = 0;
 /*
- * use 1 wave and the mfma32x32x8xf16 instruction to do the computation, tile_size is 64 x 64
- * block dim(32, 2)
+ * use 1 wave and the smfmacx32x32x16xf16 instruction to do the computation, tile_size is 32X16, 
+ * 16X32, block dim(32, 2)
 */
 __device__ void sparse_gemm_32x32x16_fp16_device(__half *sa, int *sparse_idx, __half *sb, float *sc, int am, int ak, int bn, int bk, int cm, int cn) {
 #if __gfx90a__ || __gfx908__ || __gfx942__
