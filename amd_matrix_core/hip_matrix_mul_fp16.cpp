@@ -147,7 +147,7 @@ bool hip_matrix_mul_32x32x8_fp16(CMatrix<__half> &in1, CMatrix<__half> &in2, CMa
     hip_hgemm_kernel_32x32x8f16<<<grid, block>>>(da, db, dc, M, N, K);
     hipError_t ret = hipGetLastError();
     if (ret != hipSuccess) {
-        std::cout << "hip_matrix_mul_fp16_464, kernel launch error, code = " << ret << std::endl;
+        std::cout << "hip_matrix_mul_32x32x8_fp16, kernel launch error, code = " << ret << std::endl;
         std::cout << "Error info: " << hipGetErrorString(ret) << std::endl;
     }
 
@@ -260,3 +260,157 @@ bool hip_matrix_mul_4x4x4_fp16_464(CMatrix<__half> &in1, CMatrix<__half> &in2, C
     return true;
 }
 
+
+#define SHARED_SIZE 64
+#define SM SHARED_SIZE
+#define SK (SHARED_SIZE + 1)
+#define SN (SHARED_SIZE + 1)
+#define SIZE (SHARED_SIZE * (SHARED_SIZE + 1))
+
+
+// gfx950 double rate mfma instructions
+/*
+ * use 1 wave and the mfma32x32x16xf16 instruction to do the computation, tile_size is 64 x 64
+ * block dim(32, 2)
+*/
+__device__ void hgemm_32x32x16_fp16_device(__half *sa, __half *sb, float *sc, int sam, int sak, int sbn, int sbk, int scm, int scn) {
+    #if __gfx90a__ || __gfx908__ || __gfx942__
+
+    // using float16x8 = __attribute__((__vector_size__(8 * sizeof(__half)))) __half;
+    using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
+    using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
+    // threadsPerWarp [32, 2]
+    int tidx = threadIdx.x % 32;
+    int tidy = threadIdx.x / 32;
+
+    float16x4 a[2];
+    float16x4 b[2];
+    floatx16 d[4] = {0};
+    // first quarter
+    for (int k = 0; k < 64; k += 8) {
+        for (int i = 0; i < 4; ++i) {
+            // a[0] is for upper half of sa, a[1] is for lower half of sa
+            a[0][i] = sa[tidx * sak + i + 4 * tidy + k];
+            a[1][i] = sa[(tidx + 32) * sak + i + 4 * tidy + k];
+            b[0][i] = sb[tidx * sbk + i + 4 * tidy + k];
+            b[1][i] = sb[(tidx + 32) * sbk + i + 4 * tidy + k];
+        }
+
+        d[0] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[0], d[0], 0, 0, 0);
+        d[1] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[1], d[1], 0, 0, 0);
+        d[2] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[0], d[2], 0, 0, 0);
+        d[3] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[1], d[3], 0, 0, 0);
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        int i1 = i % 2;
+        int i2 = i / 2;
+        for (int j = 0; j < 16; ++j) {
+            int j1 = j % 4;
+            int j2 = j / 4;
+            int idx = tidx + i1 * 32 + (4 * tidy + j1 + 8 * j2 + i2 * 32) * scn;
+            sc[idx] += d[i][j];
+        }
+    }
+
+    #elif __gfx950__
+
+    using float16x8 = __attribute__((__vector_size__(8 * sizeof(_Float16)))) _Float16;
+    using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
+    // threadsPerWarp [32, 2]
+    int tidx = threadIdx.x % 32;
+    int tidy = threadIdx.x / 32;
+
+    float16x4 a[2];
+    float16x4 b[2];
+    floatx16 d[4] = {0};
+
+    for (int k = 0; k < 64; k += 16) {
+        for (int i = 0; i < 8; ++i) {
+            // a[0] is for upper half of sa, a[1] is for lower half of sa
+            int i0 = i % 4;
+            int i1 = i / 4;
+            a[0][i] = sa[tidx * sak + i0 + 4 * tidy + 8 * i1 + k];
+            a[1][i] = sa[(tidx + 32) * sak + i0 + 4 * tidy + 8 * i1 + k];
+
+            b[0][i] = sb[tidx * sbk + i0 + 4 * tidy + 8 * i1 + k];
+            b[1][i] = sb[(tidx + 32) * sbk + i0 + 4 * tidy + 8 * i1 + k];
+        }
+
+        d[0] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[0], b[0], d[0], 0, 0, 0);
+        d[1] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[0], b[1], d[1], 0, 0, 0);
+        d[2] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[1], b[0], d[2], 0, 0, 0);
+        d[3] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[1], b[1], d[3], 0, 0, 0);
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        int i1 = i % 2;
+        int i2 = i / 2;
+        for (int j = 0; j < 16; ++j) {
+            int j1 = j % 4;
+            int j2 = j / 4;
+            int idx = tidx + i1 * 32 + (4 * tidy + j1 + 8 * j2 + i2 * 32) * scn;
+            sc[idx] += d[i][j];
+        }
+    }
+
+
+    #endif
+}
+    
+
+__global__ void hip_hgemm_double_reate_32x32x16f16(__half *A, __half *B, __half *C, int M, int N, int K) {
+    const size_t size = SHARED_SIZE * (SHARED_SIZE + 1);
+    __shared__ __half sa[SIZE], sb[SIZE];
+    __shared__ float sc[SIZE];
+        int sam = SHARED_SIZE;
+        int sak = SHARED_SIZE + 1;
+        int sbn = SHARED_SIZE;
+        int sbk = SHARED_SIZE + 1;
+        int scm = SHARED_SIZE;
+        int scn = SHARED_SIZE + 1;
+    for (int j = 0; j < scn; ++j) {
+        sc[j * scn + threadIdx.x] = 0.0f;
+    }
+
+    for (int i = 0; i < K; i += 64) {
+        for (int j = 0; j < 64; ++j) {
+            sa[j * sak + threadIdx.x] = A[(blockIdx.x * 64 + j) * K + threadIdx.x + i];
+            sb[j * sbk + threadIdx.x] = B[(blockIdx.y * 64 + j) * K + threadIdx.x + i];
+        }
+
+        hgemm_32x32x16_fp16_device(sa, sb, sc, sam, sak, sbn, sbk, scm, scn);
+    }
+
+    for (int j = 0; j < 64; j++) {
+        C[(blockIdx.x * 64 + j) * N + blockIdx.y * 64 + threadIdx.x] = sc[j * scn + threadIdx.x];
+    }
+}
+
+bool hip_matrix_mul_double_rate_32x32x16_fp16(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix<__half> &res, double& flops) {
+    size_t M, N, K1, K2, K;
+    in1.get_size(M, K1);
+    in2.get_size(K2, N);
+    assert(K1 == K2);
+    K = K1;
+    __half *da, *db, *dc;
+    hipMalloc((void**)&da, sizeof(__half) * M * K);
+    hipMalloc((void**)&db, sizeof(__half) * K * N);
+    hipMalloc((void**)&dc, sizeof(__half) * M * N);
+
+    hipMemcpy(da, in1.get_buffer(), sizeof(__half) * M * K, hipMemcpyHostToDevice);
+    hipMemcpy(db, in2.get_buffer(), sizeof(__half) * K * N, hipMemcpyHostToDevice);
+
+    dim3 grid(M/64, N/64);
+    dim3 block(64, 1);
+    hip_hgemm_double_reate_32x32x16f16<<<grid, block>>>(da, db, dc, M, N, K);
+    hipError_t ret = hipGetLastError();
+    if (ret != hipSuccess) {
+        std::cout << "hip_hgemm_double_reate_32x32x16f16, kernel launch error, code = " << ret << std::endl;
+        std::cout << "Error info: " << hipGetErrorString(ret) << std::endl;
+    }
+
+    hipMemcpy((void*)res.get_buffer(), dc, sizeof(__half) * M * N, hipMemcpyDeviceToHost);
+
+    return true;
+}

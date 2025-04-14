@@ -22,5 +22,8 @@ bool hip_matrix_mul_f16_naive(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatri
 bool hip_matrix_mul_int8_naive(CMatrix<int8_t> &in1, CMatrix<int8_t> &in2, CMatrix<int32_t> &res, double& flops);
 bool hip_matrix_mul_4x4x4_int8_464(CMatrix<int8_t> &in1, CMatrix<int8_t> &in2, CMatrix<int32_t> &res, double& flops);
 
+
+bool hip_matrix_mul_double_rate_32x32x16_fp16(CMatrix<__half> &in1, CMatrix<__half> &in2, CMatrix<__half> &res, double& flops);
+
 #endif
 
