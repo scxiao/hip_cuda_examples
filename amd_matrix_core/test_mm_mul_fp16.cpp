@@ -153,31 +153,31 @@ int main(int argc, char **argv) {
         std::cout << ", PASSED!" << std::endl;
     }
 
-    // // mfma32X32X8
-    // timer.start();
-    // ret = hip_matrix_mul_double_rate_32x32x16_fp16(matrix1_half, matrix2_half, matrix_res_half, flops);
-    // if (ret == false) {
-    //     cout << "hip_matrix_mul_double_rate_32x32x16_fp16 failed, Matrix dimension mismatch!" << endl;
-    //     return 1;
-    // }
-    // timer.stop();
-    // kernel_time_us = timer.gettime_us(); 
-    // cout << "hip_matrix_mul_double_rate_32x32x16_fp16 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
+    // mfma32X32X8
+    timer.start();
+    ret = hip_matrix_mul_double_rate_32x32x16_fp16(matrix1_half, matrix2_half, matrix_res_half, flops);
+    if (ret == false) {
+        cout << "hip_matrix_mul_double_rate_32x32x16_fp16 failed, Matrix dimension mismatch!" << endl;
+        return 1;
+    }
+    timer.stop();
+    kernel_time_us = timer.gettime_us(); 
+    cout << "hip_matrix_mul_double_rate_32x32x16_fp16 implementation = " << kernel_time_us << " us, flops = " << flops << " TFLOPS";
 
-    // for (int i = 0; i < m; ++i) {
-    //     for (int j = 0; j < n; ++j) {
-    //         matrix_res_float.get_elem(i, j) = matrix_res_half.get_elem(i, j);
-    //     }
-    // }
+    for (int i = 0; i < m; ++i) {
+        for (int j = 0; j < n; ++j) {
+            matrix_res_float.get_elem(i, j) = matrix_res_half.get_elem(i, j);
+        }
+    }
 
-    // ret = (res_matrix1 == matrix_res_float);
-    // if (ret == false) {
-    //     cout << "hip hip_matrix_mul_double_rate_32x32x16_fp16 implementation failed." << endl;
-    //     return 1;
-    // }
-    // else {
-    //     std::cout << ", PASSED!" << std::endl;
-    // }
+    ret = (res_matrix1 == matrix_res_float);
+    if (ret == false) {
+        cout << "hip hip_matrix_mul_double_rate_32x32x16_fp16 implementation failed." << endl;
+        return 1;
+    }
+    else {
+        std::cout << ", PASSED!" << std::endl;
+    }
 
 
     return 0;
