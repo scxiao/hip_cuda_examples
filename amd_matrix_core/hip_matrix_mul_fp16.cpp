@@ -321,8 +321,8 @@ __device__ void hgemm_32x32x16_fp16_device(__half *sa, __half *sb, float *sc, in
     int tidx = threadIdx.x % 32;
     int tidy = threadIdx.x / 32;
 
-    float16x4 a[2];
-    float16x4 b[2];
+    float16x8 a[2];
+    float16x8 b[2];
     floatx16 d[4] = {0};
 
     for (int k = 0; k < 64; k += 16) {
@@ -337,10 +337,10 @@ __device__ void hgemm_32x32x16_fp16_device(__half *sa, __half *sb, float *sc, in
             b[1][i] = sb[(tidx + 32) * sbk + i0 + 4 * tidy + 8 * i1 + k];
         }
 
-        d[0] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[0], b[0], d[0], 0, 0, 0);
-        d[1] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[0], b[1], d[1], 0, 0, 0);
-        d[2] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[1], b[0], d[2], 0, 0, 0);
-        d[3] = __builtin_amdgcn_mfma_f32_32x32x16f16(a[1], b[1], d[3], 0, 0, 0);
+        d[0] = __builtin_amdgcn_mfma_f32_32x32x16_f16(a[0], b[0], d[0], 0, 0, 0);
+        d[1] = __builtin_amdgcn_mfma_f32_32x32x16_f16(a[0], b[1], d[1], 0, 0, 0);
+        d[2] = __builtin_amdgcn_mfma_f32_32x32x16_f16(a[1], b[0], d[2], 0, 0, 0);
+        d[3] = __builtin_amdgcn_mfma_f32_32x32x16_f16(a[1], b[1], d[3], 0, 0, 0);
     }
 
     for (int i = 0; i < 4; ++i) {

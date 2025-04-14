@@ -264,7 +264,7 @@ bool hip_matrix_mul_4x4x4_int8_464(CMatrix<int8_t> &in1, CMatrix<int8_t> &in2, C
 
 // bypass LDS implementation, block_size (4, 64)
 __global__ void hip_hgemm_kernel_4x4x4_int8_464_bpl(int8_t *A, int8_t *B, int32_t *C, int M, int N, int K) {
-    using int8x8 = __attribute__((__vector_size__(8 * sizeof(int8_t)))) int8_t;
+    using int8x4 = __attribute__((__vector_size__(4 * sizeof(int8_t)))) int8_t;
     using int32x4 = __attribute__((__vector_size__(4 * sizeof(int32_t)))) int32_t;
 
     int8x4 a8x4, b8x4;
