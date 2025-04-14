@@ -24,7 +24,7 @@ __global__ void hip_hgemm_naive_f16(__half *A, __half *B, __half *C, int M, int 
  * block dim(32, 2)
 */
 __device__ void hgemm_32x32x8_fp16_device(__half *sa, __half *sb, float *sc, int sam, int sak, int sbn, int sbk, int scm, int scn) {
-#if __gfx90a__ || __gfx908__ || __gfx942__
+#if __gfx90a__ || __gfx908__ || __gfx942__ || __gfx950__
     // using float16x8 = __attribute__((__vector_size__(8 * sizeof(__half)))) __half;
     using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
     using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
@@ -274,46 +274,8 @@ bool hip_matrix_mul_4x4x4_fp16_464(CMatrix<__half> &in1, CMatrix<__half> &in2, C
  * block dim(32, 2)
 */
 __device__ void hgemm_32x32x16_fp16_device(__half *sa, __half *sb, float *sc, int sam, int sak, int sbn, int sbk, int scm, int scn) {
-    #if __gfx90a__ || __gfx908__ || __gfx942__
 
-    // using float16x8 = __attribute__((__vector_size__(8 * sizeof(__half)))) __half;
-    using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
-    using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
-    // threadsPerWarp [32, 2]
-    int tidx = threadIdx.x % 32;
-    int tidy = threadIdx.x / 32;
-
-    float16x4 a[2];
-    float16x4 b[2];
-    floatx16 d[4] = {0};
-    // first quarter
-    for (int k = 0; k < 64; k += 8) {
-        for (int i = 0; i < 4; ++i) {
-            // a[0] is for upper half of sa, a[1] is for lower half of sa
-            a[0][i] = sa[tidx * sak + i + 4 * tidy + k];
-            a[1][i] = sa[(tidx + 32) * sak + i + 4 * tidy + k];
-            b[0][i] = sb[tidx * sbk + i + 4 * tidy + k];
-            b[1][i] = sb[(tidx + 32) * sbk + i + 4 * tidy + k];
-        }
-
-        d[0] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[0], d[0], 0, 0, 0);
-        d[1] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[1], d[1], 0, 0, 0);
-        d[2] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[0], d[2], 0, 0, 0);
-        d[3] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[1], d[3], 0, 0, 0);
-    }
-
-    for (int i = 0; i < 4; ++i) {
-        int i1 = i % 2;
-        int i2 = i / 2;
-        for (int j = 0; j < 16; ++j) {
-            int j1 = j % 4;
-            int j2 = j / 4;
-            int idx = tidx + i1 * 32 + (4 * tidy + j1 + 8 * j2 + i2 * 32) * scn;
-            sc[idx] += d[i][j];
-        }
-    }
-
-    #elif __gfx950__
+    #if __gfx950__
 
     using float16x8 = __attribute__((__vector_size__(8 * sizeof(_Float16)))) _Float16;
     using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
@@ -354,6 +316,44 @@ __device__ void hgemm_32x32x16_fp16_device(__half *sa, __half *sb, float *sc, in
         }
     }
 
+    #elif __gfx90a__ || __gfx908__ || __gfx942__
+
+    // using float16x8 = __attribute__((__vector_size__(8 * sizeof(__half)))) __half;
+    using float16x4 = __attribute__((__vector_size__(4 * sizeof(_Float16)))) _Float16;
+    using floatx16 = __attribute__((__vector_size__(16 * sizeof(float)))) float;
+    // threadsPerWarp [32, 2]
+    int tidx = threadIdx.x % 32;
+    int tidy = threadIdx.x / 32;
+
+    float16x4 a[2];
+    float16x4 b[2];
+    floatx16 d[4] = {0};
+    // first quarter
+    for (int k = 0; k < 64; k += 8) {
+        for (int i = 0; i < 4; ++i) {
+            // a[0] is for upper half of sa, a[1] is for lower half of sa
+            a[0][i] = sa[tidx * sak + i + 4 * tidy + k];
+            a[1][i] = sa[(tidx + 32) * sak + i + 4 * tidy + k];
+            b[0][i] = sb[tidx * sbk + i + 4 * tidy + k];
+            b[1][i] = sb[(tidx + 32) * sbk + i + 4 * tidy + k];
+        }
+
+        d[0] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[0], d[0], 0, 0, 0);
+        d[1] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[0], b[1], d[1], 0, 0, 0);
+        d[2] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[0], d[2], 0, 0, 0);
+        d[3] = __builtin_amdgcn_mfma_f32_32x32x8f16(a[1], b[1], d[3], 0, 0, 0);
+    }
+
+    for (int i = 0; i < 4; ++i) {
+        int i1 = i % 2;
+        int i2 = i / 2;
+        for (int j = 0; j < 16; ++j) {
+            int j1 = j % 4;
+            int j2 = j / 4;
+            int idx = tidx + i1 * 32 + (4 * tidy + j1 + 8 * j2 + i2 * 32) * scn;
+            sc[idx] += d[i][j];
+        }
+    }
 
     #endif
 }
