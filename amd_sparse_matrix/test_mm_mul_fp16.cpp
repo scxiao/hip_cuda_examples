@@ -34,14 +34,14 @@ CMatrix<float> sparseMatMul(CMatrix<__half> &a, CMatrix<int> &idx, CMatrix<__hal
 
 
 int main(int argc, char **argv) {
-    // if (argc != 4) {
-    //     cout << "Usage: " << argv[0] << " i k j thread_num" << endl;
-    //     return 0;
-    // }
+    if (argc != 4) {
+        cout << "Usage: " << argv[0] << " i k j thread_num" << endl;
+        return 0;
+    }
 
-    // size_t m = atoi(argv[1]);
-    // size_t k = atoi(argv[2]);
-    // size_t n = atoi(argv[3]);
+    size_t m = atoi(argv[1]);
+    size_t k = atoi(argv[2]);
+    size_t n = atoi(argv[3]);
 
     size_t m = 32;
     size_t n = 32;

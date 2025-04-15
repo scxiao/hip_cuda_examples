@@ -92,15 +92,33 @@ __device__ void sparse_gemm_32x32x16_fp16_device(__half *sa, int *sparse_idx, __
 }
 
 
-#define SHARED_SIZE 32
+#define SHARED_SIZE 64
 #define SM SHARED_SIZE
-#define SK 16
+#define SK 32
 #define SN SHARED_SIZE
-#define SIZE (SHARED_SIZE * (SK + 1))
 
 
 __global__ void hip_sparse_hgemm_kernel_32x32x16f16(__half *A, int *idx, __half *B, float *C, int M, int Ka, int N, int Kb) {
-    sparse_gemm_32x32x16_fp16_device(A, idx, B, C, M, Ka, N, Kb, M, N);
+    const size_t sizeA = SHARED_SIZE * (SK + 1);
+    const size_t sizeIdxA = SHARED_SIZE * (SK / 4 + 1);
+    const size_t sizeB = SHARED_SIZE * (2 * SK + 1);
+    const size_t sizeC = SHARED_SIZE * (SHARED_SIZE + 1);
+    __shared__ __half sa[sizeA], sia[sizeIdxA], [sb[sizeB];
+    __shared__ float sc[sizeC];
+        int sam = SHARED_SIZE;
+        int sak = SK + 1;
+        int sbn = SHARED_SIZE;
+        int sbk = 2 * SK + 1;
+        int scm = SHARED_SIZE;
+        int scn = SHARED_SIZE + 1;
+    for (int j = 0; j < scm; ++j) {
+        sc[j * scn + threadIdx.x] = 0.0f;
+    }
+
+    for (int i = 0; i < K; i += 64) {
+
+        sparse_gemm_32x32x16_fp16_device(A, idx, B, C, M, Ka, N, Kb, M, N);
+    }
 }
 
 std::vector<int> compressSparseIndex(CMatrix<int> &sparse_indices, const int abid = 0) {
@@ -146,7 +164,7 @@ bool hip_sparse_matrix_mul_32x32x16_fp16(CMatrix<__half> &in1, CMatrix<int>& idx
     hipMemcpy(da_i, compressed_idx.data(), sizeof(int) * compressed_idx.size(), hipMemcpyHostToDevice);
     hipMemcpy(db, in2.get_buffer(), sizeof(__half) * K2 * N, hipMemcpyHostToDevice);
 
-    dim3 grid(1, 1);
+    dim3 grid(M/64, N/64);
     dim3 block(64, 1);
     hip_sparse_hgemm_kernel_32x32x16f16<<<grid, block>>>(da, da_i, db, dc, M, K1, N, K2);
     hipError_t ret = hipGetLastError();
